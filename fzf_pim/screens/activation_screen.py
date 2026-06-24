@@ -82,7 +82,7 @@ class ActivationScreen(Screen):
         table.add_column("Role")
         table.add_column("Scope")
         table.add_column("Expires")
-        table.add_column("Status", width=20)
+        table.add_column("Status", width=36)
         for role in self._sub_roles:
             table.add_row(
                 role.role_name,
@@ -95,7 +95,7 @@ class ActivationScreen(Screen):
             global_table.add_column("Role")
             global_table.add_column("Scope")
             global_table.add_column("Expires")
-            global_table.add_column("Status", width=20)
+            global_table.add_column("Status", width=36)
             for role in self._global_roles:
                 global_table.add_row(
                     role.role_name,
@@ -154,7 +154,8 @@ class ActivationScreen(Screen):
                 full_error = str(exc)
                 log.error("activation failed for %s: %s", role.role_name, full_error)
                 self._errors[i] = full_error
-                label = "✗ Error"
+                short = full_error[:30] + "…" if len(full_error) > 30 else full_error
+                label = f"✗ {short}"
                 self.app.call_from_thread(self._append_error, role.role_name, full_error)
             self.app.call_from_thread(self._set_status, "roles-table", i, label)
         for i, role in enumerate(self._global_roles):
@@ -172,7 +173,8 @@ class ActivationScreen(Screen):
                 full_error = str(exc)
                 log.error("activation failed for %s: %s", role.role_name, full_error)
                 self._errors[len(self._sub_roles) + i] = full_error
-                label = "✗ Error"
+                short = full_error[:30] + "…" if len(full_error) > 30 else full_error
+                label = f"✗ {short}"
                 self.app.call_from_thread(self._append_error, role.role_name, full_error)
             self.app.call_from_thread(self._set_status, "global-roles-table", i, label)
         self.app.call_from_thread(self._on_activation_done)
