@@ -80,11 +80,16 @@ class Subscription:
 class EligibleRole:
     role_name: str
     role_definition_id: str
-    scope: str               # e.g. /subscriptions/{id}
-    scope_display_name: str  # human-readable subscription name
+    scope: str               # actual assignment scope: /subscriptions/{id} or /providers/Microsoft.Management/managementGroups/{id}
+    scope_display_name: str  # human-readable scope name
     principal_id: str
     eligibility_schedule_id: str  # short GUID used in linkedRoleEligibilityScheduleId
     expiry: str | None            # ISO 8601 datetime string or None
+
+    @property
+    def is_global(self) -> bool:
+        """True if assigned at management group or root scope (not subscription-scoped)."""
+        return not self.scope.startswith("/subscriptions/")
 
 
 # ---------------------------------------------------------------------------
@@ -140,11 +145,12 @@ def list_eligible_roles(subscription_id: str) -> list[EligibleRole]:
         # Extract the short GUID from the full resource path
         sched_path: str = props.get("roleEligibilityScheduleId", "")
         sched_id = sched_path.rsplit("/", 1)[-1] if "/" in sched_path else item.get("name", str(uuid.uuid4()))
+        actual_scope = expanded.get("scope", {}).get("id") or scope
         roles.append(
             EligibleRole(
                 role_name=expanded.get("roleDefinition", {}).get("displayName", "Unknown"),
                 role_definition_id=props.get("roleDefinitionId", ""),
-                scope=scope,
+                scope=actual_scope,
                 scope_display_name=(
                     expanded.get("scope", {}).get("displayName") or subscription_id
                 ),

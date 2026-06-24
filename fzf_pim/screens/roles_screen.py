@@ -8,6 +8,7 @@ from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, Label, LoadingIndicator, SelectionList
+from textual.widgets._selection_list import Selection
 
 MAX_ROLES = 3
 
@@ -125,14 +126,34 @@ class RolesScreen(Screen):
         sl.clear_options()
         self._visible_indices = set()
         q = query.strip().lower()
-        for i, role in enumerate(self.all_roles):
-            text = f"{role.role_name}  —  {role.scope_display_name}"
-            expiry_tag = f"  [expires {azure.format_expiry(role.expiry)}]" if role.expiry else ""
-            display = f"{text}{expiry_tag}"
-            if q and q not in display.lower():
-                continue
-            sl.add_option((display, i, i in self._selected))
-            self._visible_indices.add(i)
+
+        sub_items = [(i, r) for i, r in enumerate(self.all_roles) if not r.is_global]
+        global_items = [(i, r) for i, r in enumerate(self.all_roles) if r.is_global]
+
+        def _add(items: list) -> None:
+            for i, role in items:
+                text = f"{role.role_name}  —  {role.scope_display_name}"
+                expiry_tag = f"  [expires {azure.format_expiry(role.expiry)}]" if role.expiry else ""
+                display = f"{text}{expiry_tag}"
+                if q and q not in display.lower():
+                    continue
+                sl.add_option(Selection(display, i, i in self._selected))
+                self._visible_indices.add(i)
+
+        _add(sub_items)
+
+        visible_globals = [
+            (i, r) for i, r in global_items
+            if not q or q in f"{r.role_name}  —  {r.scope_display_name}".lower()
+        ]
+        if visible_globals:
+            sl.add_option(Selection(
+                "⚠ Global assignments (management group scope)",
+                -1,
+                disabled=True,
+            ))
+            _add(global_items)
+
         self._rebuilding = False
         self._update_status()
 

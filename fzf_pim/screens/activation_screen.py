@@ -39,6 +39,8 @@ class ActivationScreen(Screen):
     def __init__(self, roles: list[azure.EligibleRole]) -> None:
         super().__init__()
         self.roles = roles
+        self._sub_roles = [r for r in roles if not r.is_global]
+        self._global_roles = [r for r in roles if r.is_global]
         self._activating = False
         self._errors: dict[int, str] = {}  # row index → full error message
 
@@ -50,6 +52,13 @@ class ActivationScreen(Screen):
                 id="title",
             )
             yield DataTable(id="roles-table", show_cursor=False)
+            if self._global_roles:
+                with Vertical(id="global-roles-box"):
+                    yield Label(
+                        f"[bold yellow]⚠ Global assignments[/bold yellow]"
+                        f"  [dim]({len(self._global_roles)} role(s) — management group scope)[/dim]"
+                    )
+                    yield DataTable(id="global-roles-table", show_cursor=False)
             with Vertical(id="form"):
                 yield Label("Justification  [dim](required, shared across all roles)[/dim]")
                 yield Input(
@@ -59,7 +68,7 @@ class ActivationScreen(Screen):
                 yield Label("Duration")
                 yield Select(
                     _DURATION_OPTIONS,
-                    value="PT8H",
+                    value="PT1H",
                     id="duration",
                 )
             with Horizontal(id="buttons"):
@@ -70,14 +79,30 @@ class ActivationScreen(Screen):
 
     def on_mount(self) -> None:
         table = self.query_one("#roles-table", DataTable)
-        table.add_columns("Role", "Scope", "Expires", "Status")
-        for role in self.roles:
+        table.add_column("Role")
+        table.add_column("Scope")
+        table.add_column("Expires")
+        table.add_column("Status", width=20)
+        for role in self._sub_roles:
             table.add_row(
                 role.role_name,
                 role.scope_display_name,
                 azure.format_expiry(role.expiry),
                 "—",
             )
+        if self._global_roles:
+            global_table = self.query_one("#global-roles-table", DataTable)
+            global_table.add_column("Role")
+            global_table.add_column("Scope")
+            global_table.add_column("Expires")
+            global_table.add_column("Status", width=20)
+            for role in self._global_roles:
+                global_table.add_row(
+                    role.role_name,
+                    role.scope_display_name,
+                    azure.format_expiry(role.expiry),
+                    "—",
+                )
         self.query_one("#justification").focus()
 
     # ------------------------------------------------------------------
@@ -101,7 +126,7 @@ class ActivationScreen(Screen):
             self.notify("Justification is required.", severity="warning")
             self.query_one("#justification").focus()
             return
-        duration = self.query_one("#duration", Select).value or "PT8H"
+        duration = self.query_one("#duration", Select).value or "PT1H"
 
         self._activating = True
         self.query_one("#btn-activate", Button).disabled = True
@@ -114,8 +139,8 @@ class ActivationScreen(Screen):
 
     @work(thread=True)
     def _run_activation(self, justification: str, duration: str) -> None:
-        for i, role in enumerate(self.roles):
-            self.app.call_from_thread(self._set_status, i, "Activating…")
+        for i, role in enumerate(self._sub_roles):
+            self.app.call_from_thread(self._set_status, "roles-table", i, "Activating…")
             try:
                 result = azure.activate_role(
                     role,
@@ -131,15 +156,33 @@ class ActivationScreen(Screen):
                 self._errors[i] = full_error
                 label = "✗ Error"
                 self.app.call_from_thread(self._append_error, role.role_name, full_error)
-            self.app.call_from_thread(self._set_status, i, label)
+            self.app.call_from_thread(self._set_status, "roles-table", i, label)
+        for i, role in enumerate(self._global_roles):
+            self.app.call_from_thread(self._set_status, "global-roles-table", i, "Activating…")
+            try:
+                result = azure.activate_role(
+                    role,
+                    justification,
+                    duration,
+                    dry_run=self.app.dry_run,  # type: ignore[attr-defined]
+                )
+                status = result.get("properties", {}).get("status", "Submitted")
+                label = self._format_status(status)
+            except Exception as exc:
+                full_error = str(exc)
+                log.error("activation failed for %s: %s", role.role_name, full_error)
+                self._errors[len(self._sub_roles) + i] = full_error
+                label = "✗ Error"
+                self.app.call_from_thread(self._append_error, role.role_name, full_error)
+            self.app.call_from_thread(self._set_status, "global-roles-table", i, label)
         self.app.call_from_thread(self._on_activation_done)
 
     # ------------------------------------------------------------------
     # UI update helpers (called from main thread via call_from_thread)
     # ------------------------------------------------------------------
 
-    def _set_status(self, row: int, text: str) -> None:
-        table = self.query_one("#roles-table", DataTable)
+    def _set_status(self, table_id: str, row: int, text: str) -> None:
+        table = self.query_one(f"#{table_id}", DataTable)
         table.update_cell_at(Coordinate(row, _COL_STATUS), text)
 
     def _append_error(self, role_name: str, message: str) -> None:

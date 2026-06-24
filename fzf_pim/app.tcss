@@ -28,6 +28,23 @@ SelectionList {
     border: tall $panel;
 }
 
+/* SelectionList checkbox contrast fix (dark + light mode) */
+SelectionList > .selection-list--button {
+    color: $text-muted;
+}
+
+SelectionList > .selection-list--button-highlighted {
+    color: $text-muted;
+}
+
+SelectionList > .selection-list--button-selected {
+    color: $success;
+}
+
+SelectionList > .selection-list--button-selected-highlighted {
+    color: $success;
+}
+
 /* Roles screen */
 #filter {
     margin-bottom: 1;
@@ -54,6 +71,22 @@ DataTable {
 
 #btn-activate {
     margin-right: 2;
+}
+
+/* Global assignments warning box */
+#global-roles-box {
+    border: tall $warning;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+#global-roles-box Label {
+    margin: 1 0;
+    color: $text;
+}
+
+#global-roles-box DataTable {
+    margin-bottom: 0;
 }
 
 /* Error log panel (shown only on activation errors) */
