@@ -20,7 +20,8 @@ class ScopeScreen(Screen):
     BINDINGS = [
         Binding("enter", "proceed", "Load Roles", show=True, priority=True),
         Binding("slash", "focus_filter", "Filter", show=True),
-        Binding("tab", "focus_list", "Focus list", show=False),
+        Binding("tab", "focus_list", "List", show=True),
+        Binding("shift+tab", "focus_filter", "Filter", show=True),
         Binding("escape", "focus_list", "Focus list", show=False),
         Binding("a", "select_all", "All", show=True),
         Binding("ctrl+a", "select_all_visible", "Select all", show=True),

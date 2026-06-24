@@ -20,8 +20,9 @@ class RolesScreen(Screen):
     BINDINGS = [
         Binding("enter", "proceed", "Activate selected", show=True, priority=True),
         Binding("escape", "app.pop_screen", "Back", show=True),
-        Binding("tab", "focus_list", "Focus list", show=True),
-        Binding("slash", "focus_filter", "Filter", show=True),
+        Binding("tab", "focus_list", "List", show=True),
+        Binding("shift+tab", "focus_filter", "Filter", show=True),
+        Binding("slash", "focus_filter", "Filter", show=False),
         Binding("ctrl+a", "select_all_visible", "Select all", show=True),
         Binding("j", "vim_down", "↓", show=False),
         Binding("k", "vim_up", "↑", show=False),
