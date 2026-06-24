@@ -195,8 +195,10 @@ class ActivationScreen(Screen):
         error_log.write("")
 
     def _on_activation_done(self) -> None:
+        self._activating = False
         self.query_one("#btn-back", Button).disabled = False
         self.query_one("#btn-back", Button).label = "Done"
+        self.query_one("#btn-back", Button).focus()
         if self._errors:
             count = len(self._errors)
             self.notify(
