@@ -15,19 +15,19 @@ Authentication is fully delegated to the active `az` CLI session — no credenti
 **Using uv (recommended):**
 
 ```sh
-uv tool install https://github.com/jvik/fzf-pim/releases/latest/download/fzf_pim-latest-py3-none-any.whl
+uv tool install git+https://github.com/jvik/fzf-pim
 ```
 
 **Using pipx:**
 
 ```sh
-pipx install https://github.com/jvik/fzf-pim/releases/latest/download/fzf_pim-latest-py3-none-any.whl
+pipx install git+https://github.com/jvik/fzf-pim
 ```
 
-**From source:**
+**From a specific release wheel** (find the versioned `.whl` on the [releases page](https://github.com/jvik/fzf-pim/releases/latest)):
 
 ```sh
-uv tool install git+https://github.com/jvik/fzf-pim
+uv tool install https://github.com/jvik/fzf-pim/releases/latest/download/fzf_pim-VERSION-py3-none-any.whl
 ```
 
 ## Usage
