@@ -6,6 +6,7 @@ import os
 import subprocess
 
 from textual.app import App
+from textual.worker import get_current_worker
 
 from fzf_pim.screens.scope_screen import ScopeScreen
 
@@ -101,13 +102,71 @@ class PimApp(App):
     CSS_PATH = "app.tcss"
     TITLE = "fzf-pim  ·  Azure PIM"
     ENABLE_COMMAND_PALETTE = False
+    BINDINGS = [("ctrl+c", "quit", "Quit")]
 
     def __init__(self, dry_run: bool = False) -> None:
         super().__init__()
         self.dry_run = dry_run
         self.theme = "textual-dark" if _system_is_dark() else "textual-light"
+        self._color_scheme_proc: subprocess.Popen | None = None
 
     def on_mount(self) -> None:
         if self.dry_run:
             self.title = "fzf-pim  ·  Azure PIM  [DRY RUN]"
         self.push_screen(ScopeScreen())
+        self._watch_color_scheme()
+
+    def on_unmount(self) -> None:
+        if self._color_scheme_proc is not None:
+            self._color_scheme_proc.terminate()
+
+    def _watch_color_scheme(self) -> None:
+        """Start background worker that listens for OS dark/light changes."""
+        try:
+            subprocess.run(["dbus-monitor", "--version"], capture_output=True, timeout=1)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return
+        self.run_worker(self._dbus_color_scheme_watcher, thread=True)
+
+    def _dbus_color_scheme_watcher(self) -> None:
+        """Thread worker: tail dbus-monitor and update theme on changes."""
+        worker = get_current_worker()
+        proc = subprocess.Popen(
+            [
+                "dbus-monitor", "--session",
+                "type='signal',interface='org.freedesktop.portal.Settings',"
+                "member='SettingChanged'",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        self._color_scheme_proc = proc
+        namespace = None
+        key = None
+        try:
+            for line in proc.stdout:
+                if worker.is_cancelled:
+                    break
+                line = line.strip()
+                if "org.freedesktop.appearance" in line:
+                    namespace = "org.freedesktop.appearance"
+                elif namespace and "color-scheme" in line:
+                    key = "color-scheme"
+                elif namespace == "org.freedesktop.appearance" and key == "color-scheme":
+                    # Next uint32 line is the new value
+                    parts = line.split()
+                    if parts and parts[0] == "uint32" and parts[1].isdigit():
+                        scheme = int(parts[1])
+                        if scheme == 1:
+                            self.call_from_thread(setattr, self, "theme", "textual-dark")
+                        elif scheme == 2:
+                            self.call_from_thread(setattr, self, "theme", "textual-light")
+                        namespace = None
+                        key = None
+                else:
+                    namespace = None
+                    key = None
+        finally:
+            self._color_scheme_proc = None
+            proc.wait()
