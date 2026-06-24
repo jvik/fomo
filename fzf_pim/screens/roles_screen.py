@@ -58,9 +58,9 @@ class RolesScreen(Screen):
     def _load_roles_for_sub(self, sub_id: str) -> None:
         try:
             roles = azure.list_eligible_roles(sub_id)
-            self.call_from_thread(self._on_roles_loaded, sub_id, roles)
+            self.app.call_from_thread(self._on_roles_loaded, sub_id, roles)
         except Exception as exc:
-            self.call_from_thread(self._on_roles_error, sub_id, str(exc))
+            self.app.call_from_thread(self._on_roles_error, sub_id, str(exc))
 
     def _on_roles_loaded(
         self, sub_id: str, roles: list[azure.EligibleRole]

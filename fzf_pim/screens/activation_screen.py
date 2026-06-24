@@ -105,7 +105,7 @@ class ActivationScreen(Screen):
     @work(thread=True)
     def _run_activation(self, justification: str, duration: str) -> None:
         for i, role in enumerate(self.roles):
-            self.call_from_thread(self._set_status, i, "Activating…")
+            self.app.call_from_thread(self._set_status, i, "Activating…")
             try:
                 result = azure.activate_role(
                     role,
@@ -117,8 +117,8 @@ class ActivationScreen(Screen):
                 label = self._format_status(status)
             except Exception as exc:
                 label = f"Error: {str(exc)[:60]}"
-            self.call_from_thread(self._set_status, i, label)
-        self.call_from_thread(self._on_activation_done)
+            self.app.call_from_thread(self._set_status, i, label)
+        self.app.call_from_thread(self._on_activation_done)
 
     # ------------------------------------------------------------------
     # UI update helpers (called from main thread via call_from_thread)

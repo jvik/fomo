@@ -38,9 +38,9 @@ class ScopeScreen(Screen):
     def _load_subs(self) -> None:
         try:
             subs = azure.list_subscriptions()
-            self.call_from_thread(self._show_subs, subs)
+            self.app.call_from_thread(self._show_subs, subs)
         except Exception as exc:
-            self.call_from_thread(self._show_error, str(exc))
+            self.app.call_from_thread(self._show_error, str(exc))
 
     def _show_subs(self, subs: list[azure.Subscription]) -> None:
         self.query_one("#spinner").display = False
