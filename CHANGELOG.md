@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.5.0](https://github.com/jvik/fzf-pim/compare/v1.4.1...v1.5.0) (2026-06-24)
+
+
+### Features
+
+* Add active role indication and filtering to roles screen ([b2085dd](https://github.com/jvik/fzf-pim/commit/b2085dd4105d1df91a8f9f7ab706d74ad9d7ab6a))
+
+
+### Bug Fixes
+
+* Update key bindings for role and scope screens ([5af4c5a](https://github.com/jvik/fzf-pim/commit/5af4c5ab72087e74f42796abbfffbdb6b4812c9f))
+
 ## [1.4.1](https://github.com/jvik/fzf-pim/compare/v1.4.0...v1.4.1) (2026-06-24)
 
 
