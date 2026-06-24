@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
+requires = ["hatchling", "hatch-vcs", "argparse-manpage"]
 build-backend = "hatchling.build"
 
 [project]
@@ -16,6 +16,8 @@ dev = ["pytest"]
 
 [project.scripts]
 fzf-pim = "fzf_pim.__main__:main"
+
+[tool.hatch.build.hooks.custom]
 
 [tool.hatch.build.targets.wheel]
 packages = ["fzf_pim"]

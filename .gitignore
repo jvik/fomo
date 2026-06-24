@@ -31,6 +31,10 @@ uv.lock
 .eggs/
 *.whl
 
+# Generated artifacts
+man/*.1
+log.log
+
 # Testing
 .tox/
 .coverage

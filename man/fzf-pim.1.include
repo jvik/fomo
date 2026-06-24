@@ -1,0 +1,133 @@
+[=DESCRIPTION]
+\fBfzf\-pim\fR is a terminal UI for activating Azure Privileged Identity
+Management (PIM) eligible role assignments.
+The application queries all eligible role assignments for the signed-in
+account and presents them in an interactive, filterable checklist.
+Multiple roles can be selected and activated in a single operation;
+each activation request is submitted in parallel so the overall wait
+time is bounded by the slowest individual role.
+.PP
+Authentication is fully delegated to the active
+.BR az (1)
+CLI session — \fBfzf\-pim\fR never handles credentials or tokens directly.
+Run
+.B az login
+before using this tool.
+
+[WORKFLOW]
+.TP
+.B Step\~1\ \(em\ Select subscriptions
+A filterable list of Azure subscriptions is shown.
+Select one or more subscriptions whose eligible roles you want to inspect.
+Press \fBEnter\fR to load roles.
+.TP
+.B Step\~2\ \(em\ Select roles
+All eligible PIM roles across the selected subscriptions are merged into a
+single filterable list.
+Type to narrow the list, use \fBSpace\fR to toggle individual items, then
+press \fBEnter\fR to proceed.
+Up to \fB3\fR roles may be selected.
+.TP
+.B Step\~3\ \(em\ Confirm and activate
+Enter a justification (required by Azure PIM), choose an activation duration,
+and press the \fBActivate\fR button.
+Each role's activation status is shown in a live table.
+Global (management-group-scoped) roles are highlighted separately because
+they remain active across all subscriptions under that scope.
+
+[KEY BINDINGS]
+Key bindings are shown in the footer of each screen and differ slightly
+between screens.
+.SS Subscription screen
+.TP
+.B Enter
+Load roles for the selected subscriptions.
+.TP
+.B a
+Select all subscriptions.
+.TP
+.B n
+Deselect all subscriptions.
+.TP
+.BR Ctrl\-a
+Select all visible (filtered) subscriptions.
+.TP
+.B /\fR,\fB\ Tab
+Move focus to the filter input.
+.TP
+.B q
+Quit.
+.SS Role selection screen
+.TP
+.B Enter
+Proceed to the activation screen with the selected roles.
+.TP
+.BR Ctrl\-a
+Select all visible (filtered) roles.
+.TP
+.B /\fR,\fB\ Tab
+Move focus to the filter input.
+.TP
+.B Escape
+Return to the subscription screen.
+.SS Activation screen
+.TP
+.B Escape
+Return to the role selection screen.
+.SS Navigation (all screens)
+.TP
+.BR j\fR\ /\ \fBk
+Move down / up (Vim-style).
+.TP
+.BR g\fR\ /\ \fBG
+Jump to first / last item.
+
+[EXAMPLES]
+Launch the interactive TUI:
+.PP
+.B "    fzf-pim"
+.PP
+Simulate the full activation flow without making any Azure API calls
+(useful for testing or demonstrations):
+.PP
+.B "    fzf-pim --dry-run"
+.PP
+Capture verbose debug output to a file for troubleshooting:
+.PP
+.B "    fzf-pim --log /tmp/fzf-pim.log"
+.PP
+Then inspect the log:
+.PP
+.B "    grep 'az rest' /tmp/fzf-pim.log"
+
+[ENVIRONMENT]
+.TP
+.B AZURE_CLI
+\fBfzf\-pim\fR delegates all Azure API calls to the
+.BR az (1)
+CLI.
+The
+.B az
+executable must be on
+.B PATH
+and the session must be authenticated (\fBaz login\fR).
+.TP
+.B TERM
+A terminal emulator that supports 256 colours and Unicode is recommended
+for the best rendering of the Textual TUI.
+
+[SEE ALSO]
+.BR az (1),
+.BR az\-login (1)
+.PP
+Azure Privileged Identity Management documentation:
+.UR https://learn.microsoft.com/en-us/azure/active-directory/privileged-identity-management/
+.UE
+.PP
+Azure CLI installation:
+.UR https://learn.microsoft.com/en-us/cli/azure/install-azure-cli
+.UE
+.PP
+Project homepage:
+.UR https://github.com/mfyll/fzf-pim
+.UE
