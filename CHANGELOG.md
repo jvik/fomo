@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/jvik/fzf-pim/compare/v1.4.0...v1.4.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* Update activation completion handling with button state management and focus ([53ca56c](https://github.com/jvik/fzf-pim/commit/53ca56c1671ca5e2b173382dbf48f3ca7d72f15a))
+
 ## [1.4.0](https://github.com/jvik/fzf-pim/compare/v1.3.0...v1.4.0) (2026-06-24)
 
 
