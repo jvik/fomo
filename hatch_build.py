@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
-import sys
 
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
@@ -12,27 +12,29 @@ class CustomBuildHook(BuildHookInterface):
     PLUGIN_NAME = "custom"
 
     def initialize(self, version: str, build_data: dict) -> None:
-        # Ensure the local source tree is importable when argparse-manpage
-        # loads fzf_pim.__main__ to introspect the ArgumentParser.
-        if self.root not in sys.path:
-            sys.path.insert(0, self.root)
-
         from argparse_manpage.manpage import Manpage
-        from argparse_manpage.tooling import get_parser, write_to_filename
+        from argparse_manpage.tooling import write_to_filename
 
-        parser = get_parser(
-            "module",
-            "fzf_pim.__main__",
-            "build_parser",
-            "function",
-            prog="fzf-pim",
-        )
-        # The include file supplies a richer [=DESCRIPTION]; clear the brief
-        # argparse description so it doesn't get appended as a duplicate.
-        # The running app's --help is unaffected (get_parser returns a fresh object).
+        # Load __main__ by exact file path so we always use the local source
+        # tree regardless of what may be installed elsewhere on sys.path.
+        main_path = os.path.join(self.root, "fzf_pim", "__main__.py")
+        spec = importlib.util.spec_from_file_location("fzf_pim.__main__", main_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load module from {main_path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        # Build a fresh parser and clear the brief description so it doesn't
+        # appear as a duplicate alongside the richer [=DESCRIPTION] include
+        # block.  We own this object — it is never used for --help output.
+        parser = module.build_parser()
         parser.description = None
 
         include_file = os.path.join(self.root, "man", "fzf-pim.1.include")
+        if not os.path.isfile(include_file):
+            raise FileNotFoundError(
+                f"Man page include file not found: {include_file}"
+            )
 
         manpage = Manpage(
             parser,
