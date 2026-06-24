@@ -55,3 +55,15 @@ DataTable {
 #btn-activate {
     margin-right: 2;
 }
+
+/* Error log panel (shown only on activation errors) */
+#error-log {
+    height: 10;
+    border: tall $error;
+    margin-top: 1;
+    background: $surface-darken-1;
+}
+
+.hidden {
+    display: none;
+}

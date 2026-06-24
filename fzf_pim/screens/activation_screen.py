@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import logging
+
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.coordinate import Coordinate
 from textual.screen import Screen
-from textual.widgets import Button, DataTable, Footer, Header, Input, Label
+from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog
 
 from fzf_pim import azure
+
+log = logging.getLogger(__name__)
 
 # Status column index in the DataTable
 _COL_STATUS = 3
@@ -27,6 +31,7 @@ class ActivationScreen(Screen):
         super().__init__()
         self.roles = roles
         self._activating = False
+        self._errors: dict[int, str] = {}  # row index → full error message
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -53,6 +58,7 @@ class ActivationScreen(Screen):
             with Horizontal(id="buttons"):
                 yield Button("Activate", variant="primary", id="btn-activate")
                 yield Button("Back", id="btn-back")
+            yield RichLog(id="error-log", highlight=True, markup=True, classes="hidden")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -124,7 +130,11 @@ class ActivationScreen(Screen):
                 status: str = result.get("properties", {}).get("status", "Submitted")
                 label = self._format_status(status)
             except Exception as exc:
-                label = f"Error: {str(exc)[:60]}"
+                full_error = str(exc)
+                log.error("activation failed for %s: %s", role.role_name, full_error)
+                self._errors[i] = full_error
+                label = "✗ Error"
+                self.app.call_from_thread(self._append_error, role.role_name, full_error)
             self.app.call_from_thread(self._set_status, i, label)
         self.app.call_from_thread(self._on_activation_done)
 
@@ -136,10 +146,25 @@ class ActivationScreen(Screen):
         table = self.query_one("#roles-table", DataTable)
         table.update_cell_at(Coordinate(row, _COL_STATUS), text)
 
+    def _append_error(self, role_name: str, message: str) -> None:
+        error_log = self.query_one("#error-log", RichLog)
+        error_log.remove_class("hidden")
+        error_log.write(f"[bold red]✗ {role_name}[/bold red]")
+        error_log.write(message)
+        error_log.write("")
+
     def _on_activation_done(self) -> None:
         self.query_one("#btn-back", Button).disabled = False
         self.query_one("#btn-back", Button).label = "Done"
-        self.notify("Activation requests submitted.", severity="information")
+        if self._errors:
+            count = len(self._errors)
+            self.notify(
+                f"{count} role(s) failed — see error details below.",
+                severity="error",
+                timeout=8,
+            )
+        else:
+            self.notify("Activation requests submitted.", severity="information")
 
     # ------------------------------------------------------------------
     # Helpers

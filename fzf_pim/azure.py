@@ -7,11 +7,14 @@ the Azure CLI session already active in the terminal.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import subprocess
 import uuid
 from dataclasses import dataclass
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -23,6 +26,7 @@ def _run_az(*args: str) -> Any:
 
     Raises RuntimeError on non-zero exit or if `az` is not found.
     """
+    log.debug("az %s", " ".join(args))
     try:
         result = subprocess.run(
             ["az", *args, "--output", "json"],
@@ -35,7 +39,14 @@ def _run_az(*args: str) -> Any:
         )
     if result.returncode != 0:
         msg = result.stderr.strip()
+        log.error(
+            "az %s failed (exit %d):\n%s",
+            " ".join(args),
+            result.returncode,
+            msg,
+        )
         raise RuntimeError(msg or f"az {' '.join(args)} exited {result.returncode}")
+    log.debug("az response: %s", result.stdout[:2000])
     return json.loads(result.stdout)
 
 
@@ -158,6 +169,7 @@ def activate_role(
     """
     request_id = str(uuid.uuid4())
     if dry_run:
+        log.debug("dry-run: skipping activation of %s", role.role_name)
         return {
             "name": request_id,
             "properties": {"status": "DryRun", "requestType": "SelfActivate"},
@@ -184,7 +196,16 @@ def activate_role(
         f"/providers/Microsoft.Authorization"
         f"/roleAssignmentScheduleRequests/{request_id}?api-version=2020-10-01"
     )
-    return _run_az(
+    log.debug(
+        "activating role %s on %s (request %s)", role.role_name, role.scope, request_id
+    )
+    response = _run_az(
         "rest", "--method", "PUT", "--url", url, "--body", body,
         "--headers", "Content-Type=application/json",
     )
+    log.debug(
+        "activation response for %s: status=%s",
+        role.role_name,
+        response.get("properties", {}).get("status"),
+    )
+    return response
