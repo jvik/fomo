@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0](https://github.com/jvik/fzf-pim/compare/v1.3.0...v1.4.0) (2026-06-24)
+
+
+### Features
+
+* Enhance role activation screen with improved status column width and error message formatting ([64e342b](https://github.com/jvik/fzf-pim/commit/64e342b9ab17f6e5bdf725fbf3df335cc99a0fe9))
+* Enhance role management with global role handling and UI updates ([aac533f](https://github.com/jvik/fzf-pim/commit/aac533f18ac483e790e6ee6dee320e600a1dae7a))
+
 ## [1.3.0](https://github.com/jvik/fzf-pim/compare/v1.2.0...v1.3.0) (2026-06-24)
 
 
