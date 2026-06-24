@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/jvik/fzf-pim/compare/v1.0.0...v1.1.0) (2026-06-24)
+
+
+### Features
+
+* Enhance release workflow with build and publish steps ([ec74f74](https://github.com/jvik/fzf-pim/commit/ec74f74d50c0e600da0abadf5e62d3a667e72daf))
+
 ## 1.0.0 (2026-06-24)
 
 
