@@ -20,6 +20,7 @@ class RolesScreen(Screen):
         Binding("escape", "app.pop_screen", "Back", show=True),
         Binding("tab", "focus_list", "Focus list", show=True),
         Binding("slash", "focus_filter", "Filter", show=True),
+        Binding("ctrl+a", "select_all_visible", "Select all", show=True),
         Binding("j", "vim_down", "↓", show=False),
         Binding("k", "vim_up", "↑", show=False),
         Binding("g", "vim_top", "Top", show=False),
@@ -152,6 +153,12 @@ class RolesScreen(Screen):
         self._selected.update(sl.selected)
         self._rebuild_list(event.value)
 
+    @on(Input.Submitted, "#filter")
+    def on_filter_submitted(self, event: Input.Submitted) -> None:  # noqa: ARG002
+        """Select all visible items and move focus to the list."""
+        self.action_select_all_visible()
+        self.query_one("#role-list").focus()
+
     @on(SelectionList.SelectedChanged, "#role-list")
     def on_selection_changed(self, event: SelectionList.SelectedChanged) -> None:
         if self._rebuilding:
@@ -171,6 +178,15 @@ class RolesScreen(Screen):
 
     def action_focus_filter(self) -> None:
         self.query_one("#filter").focus()
+
+    def action_select_all_visible(self) -> None:
+        """Select all currently visible (filtered) roles."""
+        self._selected.update(self._visible_indices)
+        sl = self.query_one("#role-list", SelectionList)
+        self._rebuilding = True
+        sl.select_all()
+        self._rebuilding = False
+        self._update_status()
 
     def action_vim_down(self) -> None:
         w = self.focused

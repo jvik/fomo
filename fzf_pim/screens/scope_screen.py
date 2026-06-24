@@ -7,7 +7,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Label, LoadingIndicator, SelectionList
+from textual.widgets import Footer, Header, Input, Label, LoadingIndicator, SelectionList
 
 from fzf_pim import azure
 
@@ -17,7 +17,11 @@ class ScopeScreen(Screen):
 
     BINDINGS = [
         Binding("enter", "proceed", "Load Roles", show=True, priority=True),
+        Binding("slash", "focus_filter", "Filter", show=True),
+        Binding("tab", "focus_list", "Focus list", show=False),
+        Binding("escape", "focus_list", "Focus list", show=False),
         Binding("a", "select_all", "All", show=True),
+        Binding("ctrl+a", "select_all_visible", "Select all", show=True),
         Binding("n", "select_none", "None", show=True),
         Binding("q", "quit_app", "Quit", show=True),
         Binding("j", "vim_down", "↓", show=False),
@@ -26,16 +30,24 @@ class ScopeScreen(Screen):
         Binding("G", "vim_bottom", "Bottom", show=False),
     ]
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._all_subs: list[azure.Subscription] = []
+        self._visible_ids: set[str] = set()
+        self._rebuilding = False
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
         with Vertical(id="main"):
             yield Label("Loading Azure subscriptions…", id="loading-label")
             yield LoadingIndicator(id="spinner")
+            yield Input(placeholder="Filter subscriptions… (type to search)", id="filter")
             yield SelectionList(id="sub-list")
         yield Footer()
 
     def on_mount(self) -> None:
         self.query_one("#sub-list").display = False
+        self.query_one("#filter").display = False
         self._load_subs()
 
     @work(thread=True)
@@ -52,9 +64,10 @@ class ScopeScreen(Screen):
             f"Select subscriptions  ({len(subs)} found)"
             "   [dim]j/k[/dim]=nav  [dim]a[/dim]=all  [dim]n[/dim]=none  [dim]Enter[/dim]=proceed"
         )
+        self._all_subs = subs
+        self.query_one("#filter").display = True
+        self._rebuild_list("")
         sl = self.query_one("#sub-list", SelectionList)
-        for sub in subs:
-            sl.add_option((f"{sub.name}  [dim]{sub.id}[/dim]", sub.id, False))
         sl.display = True
         sl.focus()
 
@@ -73,11 +86,53 @@ class ScopeScreen(Screen):
         self.query_one("#loading-label", Label).update(body)
 
     # ------------------------------------------------------------------
+    # Filter helpers
+    # ------------------------------------------------------------------
+
+    def _rebuild_list(self, query: str) -> None:
+        sl = self.query_one("#sub-list", SelectionList)
+        current_selected: set[str] = set(sl.selected)
+        self._rebuilding = True
+        sl.clear_options()
+        self._visible_ids = set()
+        q = query.strip().lower()
+        for sub in self._all_subs:
+            display = f"{sub.name}  [dim]{sub.id}[/dim]"
+            if q and q not in f"{sub.name} {sub.id}".lower():
+                continue
+            sl.add_option((display, sub.id, sub.id in current_selected))
+            self._visible_ids.add(sub.id)
+        self._rebuilding = False
+
+    @on(Input.Changed, "#filter")
+    def on_filter_changed(self, event: Input.Changed) -> None:
+        self._rebuild_list(event.value)
+
+    @on(Input.Submitted, "#filter")
+    def on_filter_submitted(self, event: Input.Submitted) -> None:  # noqa: ARG002
+        """Select all visible items and move focus to the list."""
+        self.action_select_all_visible()
+        self.query_one("#sub-list").focus()
+
+    # ------------------------------------------------------------------
     # Actions
     # ------------------------------------------------------------------
 
+    def action_focus_filter(self) -> None:
+        self.query_one("#filter").focus()
+
+    def action_focus_list(self) -> None:
+        self.query_one("#sub-list").focus()
+
     def action_select_all(self) -> None:
         self.query_one(SelectionList).select_all()
+
+    def action_select_all_visible(self) -> None:
+        """Select all currently visible (filtered) subscriptions."""
+        sl = self.query_one("#sub-list", SelectionList)
+        self._rebuilding = True
+        sl.select_all()
+        self._rebuilding = False
 
     def action_select_none(self) -> None:
         self.query_one(SelectionList).deselect_all()
