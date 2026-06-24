@@ -137,6 +137,12 @@ def list_eligible_roles(subscription_id: str) -> list[EligibleRole]:
         f"/providers/Microsoft.Authorization/roleEligibilityScheduleInstances"
         f"?$filter=asTarget()&api-version=2020-10-01"
     )
+    # Resolve the signed-in user's own object ID once.
+    # When a role eligibility is assigned to a group, the API returns the
+    # group's principalId — but SelfActivate requires the requesting *user's*
+    # object ID.  We always substitute the real user ID here so activation
+    # works for both direct and group-based eligibilities.
+    user_id = get_current_user()
     data = _run_az("rest", "--method", "GET", "--url", url)
     roles: list[EligibleRole] = []
     for item in data.get("value", []):
@@ -154,7 +160,7 @@ def list_eligible_roles(subscription_id: str) -> list[EligibleRole]:
                 scope_display_name=(
                     expanded.get("scope", {}).get("displayName") or subscription_id
                 ),
-                principal_id=props.get("principalId", ""),
+                principal_id=user_id,
                 eligibility_schedule_id=sched_id,
                 expiry=props.get("endDateTime"),
             )
