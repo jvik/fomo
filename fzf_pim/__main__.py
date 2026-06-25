@@ -22,6 +22,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Simulate activation without calling the Azure API.",
     )
     parser.add_argument(
+        "--entra",
+        action="store_true",
+        help="Start in Microsoft Entra PIM mode (Entra ID roles instead of Azure RBAC).",
+    )
+    parser.add_argument(
         "--log",
         metavar="FILE",
         default=None,
@@ -46,7 +51,7 @@ def main() -> None:
 
     from fzf_pim.app import PimApp
 
-    PimApp(dry_run=args.dry_run).run()
+    PimApp(dry_run=args.dry_run, entra=args.entra).run()
 
 
 if __name__ == "__main__":

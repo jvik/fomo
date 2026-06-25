@@ -104,16 +104,21 @@ class PimApp(App):
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [("ctrl+c", "quit", "Quit")]
 
-    def __init__(self, dry_run: bool = False) -> None:
+    def __init__(self, dry_run: bool = False, entra: bool = False) -> None:
         super().__init__()
         self.dry_run = dry_run
+        self.entra = entra
         self.theme = "textual-dark" if _system_is_dark() else "textual-light"
         self._color_scheme_proc: subprocess.Popen | None = None
 
     def on_mount(self) -> None:
         if self.dry_run:
             self.title = "fzf-pim  ·  Azure PIM  [DRY RUN]"
-        self.push_screen(ScopeScreen())
+        if self.entra:
+            from fzf_pim.screens.entra_screen import EntraRolesScreen
+            self.push_screen(EntraRolesScreen())
+        else:
+            self.push_screen(ScopeScreen())
         self._watch_color_scheme()
 
     def on_unmount(self) -> None:

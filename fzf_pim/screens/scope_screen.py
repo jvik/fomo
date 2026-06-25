@@ -25,6 +25,7 @@ class ScopeScreen(Screen):
         Binding("escape", "escape_key", "Back to filter", show=False),
         Binding("a", "select_all", "All", show=True),
         Binding("n", "select_none", "None", show=True),
+        Binding("e", "open_entra", "Entra", show=True),
         Binding("q", "quit_app", "Quit", show=True),
         Binding("j", "vim_down", "↓", show=False),
         Binding("k", "vim_up", "↑", show=False),
@@ -186,6 +187,10 @@ class ScopeScreen(Screen):
 
     def action_quit_app(self) -> None:
         self.app.exit()
+
+    def action_open_entra(self) -> None:
+        from fzf_pim.screens.entra_screen import EntraRolesScreen
+        self.app.push_screen(EntraRolesScreen())
 
     def action_vim_down(self) -> None:
         w = self.focused
