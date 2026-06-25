@@ -27,6 +27,10 @@ A terminal UI for activating Azure PIM eligible roles with multiselect.
 
 ![Activation screen](docs/screenshots/03-activation.svg)
 
+### Entra roles
+
+![Entra roles screen](docs/screenshots/04-entra.svg)
+
 ## Platform support
 
 Works on Linux, macOS, and WSL (Windows Subsystem for Linux).

@@ -131,6 +131,33 @@ async def take_activation_screen(out: Path) -> None:
         print(f"  ✓  {out / '03-activation.svg'}")
 
 
+async def take_entra_screen(out: Path) -> None:
+    """Entra role multiselect screen — roles loaded, a few selected."""
+    from fomo.app import PimApp
+
+    app = PimApp(demo_mode=True, dry_run=True)
+    async with app.run_test(size=(COLS, ROWS)) as pilot:
+        await _wait_for(pilot, lambda: _has_options(app, "#sub-list"))
+
+        # Navigate to the Entra screen via the 'e' keybind on the scope screen
+        await pilot.press("e")
+
+        await _wait_for(
+            pilot,
+            lambda: _has_options(app, "#role-list"),
+            steps=120,
+        )
+
+        rl = _sl(app, "#role-list")
+        rl.focus()
+        for i in range(min(2, rl.option_count)):
+            rl.select(rl.get_option_at_index(i))
+
+        await pilot.pause(0.1)
+        app.save_screenshot(str(out / "04-entra.svg"))
+        print(f"  ✓  {out / '04-entra.svg'}")
+
+
 async def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     print(f"Saving screenshots to {OUT}/\n")
@@ -138,6 +165,7 @@ async def main() -> None:
     await take_scope_screen(OUT)
     await take_roles_screen(OUT)
     await take_activation_screen(OUT)
+    await take_entra_screen(OUT)
 
     print("\nDone.  Reference in README.md:")
     for svg in sorted(OUT.glob("*.svg")):
