@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.1](https://github.com/jvik/fzf-pim/compare/v1.8.0...v1.8.1) (2026-06-25)
+
+
+### Bug Fixes
+
+* add priority to escape key bindings for improved navigation ([e82771b](https://github.com/jvik/fzf-pim/commit/e82771bcd72970b312dbea6531f2161177b21c0a))
+* add priority to escape key bindings for improved navigation ([031b52b](https://github.com/jvik/fzf-pim/commit/031b52bd83a93269ffda8bc1e869edfbac4ae012))
+
 ## [1.8.0](https://github.com/jvik/fzf-pim/compare/v1.7.0...v1.8.0) (2026-06-25)
 
 
