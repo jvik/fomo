@@ -68,7 +68,6 @@ class ScopeScreen(Screen):
         self.query_one("#spinner").display = False
         self.query_one("#loading-label", Label).update(
             f"Select subscriptions  ({len(subs)} found)"
-            "   [dim]j/k[/dim]=nav  [dim]a[/dim]=all  [dim]n[/dim]=none  [dim]Enter[/dim]=proceed"
         )
         self._all_subs = subs
         self.query_one("#filter").display = True
