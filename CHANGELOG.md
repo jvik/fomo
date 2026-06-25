@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.10.0](https://github.com/jvik/fzf-pim/compare/v1.9.0...v1.10.0) (2026-06-25)
+
+
+### Features
+
+* add current role assignments screen ([#22](https://github.com/jvik/fzf-pim/issues/22)) ([e0a6ad6](https://github.com/jvik/fzf-pim/commit/e0a6ad6961a10e5cbd6aebf0271189d7fcc648b7))
+* **cli:** add --entra support for non-interactive activation ([322f99e](https://github.com/jvik/fzf-pim/commit/322f99e59fc463339e688158ce55499034be3016))
+* **cli:** add management group support for non-interactive role activation ([9f79acd](https://github.com/jvik/fzf-pim/commit/9f79acd506d930e3e9c84cb6d194859bb60fc748))
+* **cli:** add non-interactive role activation via CLI flags ([80574f5](https://github.com/jvik/fzf-pim/commit/80574f55bdd147ed3b24bde168a9ec322490b60f)), closes [#20](https://github.com/jvik/fzf-pim/issues/20)
+* **cli:** enforce mutual exclusivity of --entra and --mg flags and require reason for mg activation ([795149e](https://github.com/jvik/fzf-pim/commit/795149e2242da4ac4b7cd09593955e964850bd19))
+* implement column sorting functionality in assignments screen ([215ec08](https://github.com/jvik/fzf-pim/commit/215ec08aba9d5996420b4d15b1b9e478d11f7837))
+* update active assignments retrieval to include all scopes ([ef914a2](https://github.com/jvik/fzf-pim/commit/ef914a277884a085ac24d063b75201f7da192c25))
+
 ## [1.9.0](https://github.com/jvik/fzf-pim/compare/v1.8.4...v1.9.0) (2026-06-25)
 
 
