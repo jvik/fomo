@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 
+from rich.text import Text
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -14,6 +15,8 @@ from textual.widgets import DataTable, Footer, Header, Label, LoadingIndicator, 
 from fzf_pim import azure
 
 log = logging.getLogger(__name__)
+
+_COL_NAMES = ("Role", "Scope", "Expiry", "Type")
 
 
 class AssignmentsScreen(Screen):
@@ -26,11 +29,17 @@ class AssignmentsScreen(Screen):
         Binding("k", "vim_up", "↑", show=False),
         Binding("g", "vim_top", "Top", show=False),
         Binding("G", "vim_bottom", "Bottom", show=False),
+        Binding("1", "sort_col(0)", "Sort: Role", show=True),
+        Binding("2", "sort_col(1)", "Sort: Scope", show=True),
+        Binding("3", "sort_col(2)", "Sort: Expiry", show=True),
+        Binding("4", "sort_col(3)", "Sort: Type", show=True),
     ]
 
     def __init__(self) -> None:
         super().__init__()
         self._stop_event = threading.Event()
+        self._sort_col: dict[str, object] = {}   # table id → last sorted column key
+        self._sort_asc: dict[str, bool] = {}     # table id → ascending?
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -168,6 +177,41 @@ class AssignmentsScreen(Screen):
             )
             body = f"[bold red]Error:[/bold red]\n\n{wrapped}"
         self.query_one("#entra-loading", Label).update(body)
+
+    # ------------------------------------------------------------------
+    # Column-header sorting (mouse) and key-based sorting
+    # ------------------------------------------------------------------
+
+    def _sort_table(self, table: DataTable, col: object) -> None:
+        tid = table.id or ""
+        if self._sort_col.get(tid) == col:
+            self._sort_asc[tid] = not self._sort_asc.get(tid, True)
+        else:
+            self._sort_col[tid] = col
+            self._sort_asc[tid] = True
+        table.sort(col, reverse=not self._sort_asc[tid])
+        self._refresh_headers(table)
+
+    def _refresh_headers(self, table: DataTable) -> None:
+        tid = table.id or ""
+        sort_col = self._sort_col.get(tid)
+        asc = self._sort_asc.get(tid, True)
+        arrow = " ↑" if asc else " ↓"
+        for key, name in zip(table.columns, _COL_NAMES):
+            label = Text(name + arrow) if key == sort_col else Text(name)
+            table.columns[key].label = label
+        table.refresh()
+
+    def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
+        self._sort_table(event.data_table, event.column_key)
+
+    def action_sort_col(self, col_index: int) -> None:
+        focused = self.focused
+        if not isinstance(focused, DataTable):
+            return
+        keys = list(focused.columns.keys())
+        if col_index < len(keys):
+            self._sort_table(focused, keys[col_index])
 
     # ------------------------------------------------------------------
     # vim-style navigation
