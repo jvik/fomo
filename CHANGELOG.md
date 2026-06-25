@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.4](https://github.com/jvik/fzf-pim/compare/v1.8.3...v1.8.4) (2026-06-25)
+
+
+### Bug Fixes
+
+* simplify role update message in EntraRolesScreen ([daf01c1](https://github.com/jvik/fzf-pim/commit/daf01c19a6cc2490755202153322b676285785c2))
+
 ## [1.8.3](https://github.com/jvik/fzf-pim/compare/v1.8.2...v1.8.3) (2026-06-25)
 
 
