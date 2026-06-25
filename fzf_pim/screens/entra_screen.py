@@ -79,8 +79,19 @@ class EntraRolesScreen(Screen):
 
     @work(thread=True)
     def _load_roles(self) -> None:
+        def _on_device_code(message: str) -> None:
+            url, _, code = message.partition("\n")
+            def _update() -> None:
+                self.query_one("#loading-label", Label).update(
+                    "[bold]Sign in to Microsoft Graph[/bold]\n\n"
+                    f"[dim]1.[/dim] Open:  [link]{url}[/link]\n"
+                    f"[dim]2.[/dim] Enter code:  [bold]{code}[/bold]\n\n"
+                    "[dim]Waiting for authentication…[/dim]"
+                )
+            self.app.call_from_thread(_update)
+
         try:
-            roles = azure.list_entra_eligible_roles()
+            roles = azure.list_entra_eligible_roles(on_device_code=_on_device_code)
             self.app.call_from_thread(self._on_roles_loaded, roles)
         except Exception as exc:
             self.app.call_from_thread(self._on_error, str(exc))
@@ -110,17 +121,16 @@ class EntraRolesScreen(Screen):
                 "[bold red]Azure session expired.[/bold red]\n\n"
                 "Run [bold]az login[/bold] in your terminal, then restart fzf-pim."
             )
-        elif azure.is_scope_error(msg):
-            body = (
-                "[bold red]Entra PIM requires Graph API permissions.[/bold red]\n\n"
-                "A tenant admin must grant admin consent for the Azure CLI\n"
-                "service principal (04b07795-8ddb-461a-bbee-02f9e1bf7b46) to use:\n"
-                "  • RoleEligibilitySchedule.Read.Directory\n"
-                "  • RoleAssignmentSchedule.ReadWrite.Directory\n\n"
-                "[dim]Until then, use the Azure Portal for Entra role activation.[/dim]"
-            )
+
         else:
-            body = f"[bold red]Error:[/bold red] {msg}"
+            # Wrap long messages at word boundaries so they don't get clipped.
+            wrapped = "\n".join(
+                line if len(line) <= 80 else "\n".join(
+                    msg[i:i+80] for i in range(0, len(line), 80)
+                )
+                for line in msg.splitlines()
+            )
+            body = f"[bold red]Error:[/bold red]\n\n{wrapped}"
         self.query_one("#loading-label", Label).update(body)
 
     # ------------------------------------------------------------------
