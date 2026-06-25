@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.0](https://github.com/jvik/fomo/compare/v1.10.0...v1.11.0) (2026-06-25)
+
+
+### Features
+
+* rename project from fzf-pim to fomo ([f25eb91](https://github.com/jvik/fomo/commit/f25eb91d0d2e884d07d8a9db7cf1aa8624262702))
+* rename project from fzf-pim to fomo ([7f8553c](https://github.com/jvik/fomo/commit/7f8553cc20db964c19e4a2166726c8ea8cb73620))
+
 ## [1.10.0](https://github.com/jvik/fomo/compare/v1.9.0...v1.10.0) (2026-06-25)
 
 
