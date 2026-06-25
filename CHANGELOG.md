@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.2](https://github.com/jvik/fzf-pim/compare/v1.8.1...v1.8.2) (2026-06-25)
+
+
+### Bug Fixes
+
+* remove redundant navigation instructions from subscription selection ([ef06681](https://github.com/jvik/fzf-pim/commit/ef066810d38193781c9a29d5203541f257736681))
+
 ## [1.8.1](https://github.com/jvik/fzf-pim/compare/v1.8.0...v1.8.1) (2026-06-25)
 
 
