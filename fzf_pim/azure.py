@@ -97,6 +97,12 @@ class Subscription:
 
 
 @dataclass
+class ManagementGroup:
+    id: str    # short name / tenantId-based ID used in the ARM path
+    name: str  # displayName
+
+
+@dataclass
 class EligibleRole:
     role_name: str
     role_definition_id: str
@@ -138,6 +144,29 @@ def validate_duration(s: str) -> bool:
     return bool(_DURATION_RE.match(s)) and s not in ("P", "PT")
 
 
+def parse_duration(s: str) -> str:
+    """Parse a human-friendly duration string to ISO 8601.
+
+    Accepts ISO 8601 directly (e.g. ``PT1H``) or shorthand such as
+    ``30m``, ``1h``, ``1h30m`` (case-insensitive).
+
+    Raises :exc:`ValueError` for unrecognised input.
+    """
+    if validate_duration(s):
+        return s
+    m = re.fullmatch(r"(?:(\d+)h)?(?:(\d+)m)?", s.lower())
+    if m and (m.group(1) or m.group(2)):
+        result = "PT"
+        if m.group(1):
+            result += f"{m.group(1)}H"
+        if m.group(2):
+            result += f"{m.group(2)}M"
+        return result
+    raise ValueError(
+        f"Invalid duration {s!r}. Use e.g. '30m', '1h', '1h30m', or ISO 8601 like 'PT1H'."
+    )
+
+
 def format_expiry(expiry: str | None) -> str:
     """Shorten an ISO 8601 datetime to YYYY-MM-DD, or return 'Permanent'."""
     if not expiry:
@@ -159,6 +188,55 @@ def list_subscriptions() -> list[Subscription]:
     """Return all subscriptions visible to the current account."""
     data = _run_az("account", "list")
     return [Subscription(id=s["id"], name=s["name"]) for s in data]
+
+
+def list_management_groups() -> list[ManagementGroup]:
+    """Return all management groups visible to the current account."""
+    data = _run_az("account", "management-group", "list")
+    return [ManagementGroup(id=mg["name"], name=mg["displayName"]) for mg in data]
+
+
+def list_eligible_roles_mg(mg_id: str) -> list[EligibleRole]:
+    """List eligible PIM role assignments for the signed-in user in management group *mg_id*.
+
+    *mg_id* is the short management group name (not the display name) as returned
+    by ``az account management-group list`` (.name field).
+    """
+    scope = f"/providers/Microsoft.Management/managementGroups/{mg_id}"
+    url = (
+        f"https://management.azure.com{scope}"
+        f"/providers/Microsoft.Authorization/roleEligibilityScheduleInstances"
+        f"?$filter=asTarget()&api-version=2020-10-01"
+    )
+    user_id = get_current_user()
+    active_keys = _list_active_role_keys(scope)
+    data = _run_az("rest", "--method", "GET", "--url", url)
+    roles: list[EligibleRole] = []
+    for item in data.get("value", []):
+        props = item.get("properties", {})
+        expanded = props.get("expandedProperties", {})
+        sched_path: str = props.get("roleEligibilityScheduleId", "")
+        sched_id = sched_path.rsplit("/", 1)[-1] if "/" in sched_path else item.get("name", str(uuid.uuid4()))
+        actual_scope = expanded.get("scope", {}).get("id") or scope
+        role_def_id = props.get("roleDefinitionId", "")
+        already_active = (role_def_id, actual_scope) in active_keys
+        if already_active:
+            log.debug("marking already-active role %s on %s", role_def_id, actual_scope)
+        roles.append(
+            EligibleRole(
+                role_name=expanded.get("roleDefinition", {}).get("displayName", "Unknown"),
+                role_definition_id=role_def_id,
+                scope=actual_scope,
+                scope_display_name=(
+                    expanded.get("scope", {}).get("displayName") or mg_id
+                ),
+                principal_id=user_id,
+                eligibility_schedule_id=sched_id,
+                expiry=props.get("endDateTime"),
+                is_active=already_active,
+            )
+        )
+    return roles
 
 
 def _list_active_role_keys(scope: str) -> frozenset[tuple[str, str]]:
