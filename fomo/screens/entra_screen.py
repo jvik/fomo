@@ -25,7 +25,7 @@ from textual.widgets import (
 )
 from textual.widgets._selection_list import Selection
 
-from fzf_pim import azure, tiering
+from fomo import azure, tiering
 
 log = logging.getLogger(__name__)
 
@@ -132,7 +132,7 @@ class EntraRolesScreen(Screen):
         if azure.is_auth_error(msg):
             body = (
                 "[bold red]Azure session expired.[/bold red]\n\n"
-                "Run [bold]az login[/bold] in your terminal, then restart fzf-pim."
+                "Run [bold]az login[/bold] in your terminal, then restart fomo."
             )
 
         else:

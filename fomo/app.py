@@ -1,4 +1,4 @@
-"""Root Textual application for fzf-pim."""
+"""Root Textual application for fomo."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import subprocess
 from textual.app import App
 from textual.worker import get_current_worker
 
-from fzf_pim import azure
-from fzf_pim.screens.scope_screen import ScopeScreen
+from fomo import azure
+from fomo.screens.scope_screen import ScopeScreen
 
 
 def _system_is_dark() -> bool:
@@ -101,7 +101,7 @@ class PimApp(App):
     """Azure PIM role activation TUI."""
 
     CSS_PATH = "app.tcss"
-    TITLE = "fzf-pim  ·  Azure PIM"
+    TITLE = "fomo  ·  Azure PIM"
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [("ctrl+c", "quit", "Quit")]
 
@@ -114,9 +114,9 @@ class PimApp(App):
 
     def on_mount(self) -> None:
         if self.dry_run:
-            self.title = "fzf-pim  ·  Azure PIM  [DRY RUN]"
+            self.title = "fomo  ·  Azure PIM  [DRY RUN]"
         if self.entra:
-            from fzf_pim.screens.entra_screen import EntraRolesScreen
+            from fomo.screens.entra_screen import EntraRolesScreen
             self.push_screen(EntraRolesScreen())
         else:
             self.push_screen(ScopeScreen())
@@ -126,7 +126,7 @@ class PimApp(App):
     def _load_account_info(self) -> None:
         try:
             user, tenant = azure.get_account_info()
-            base = "fzf-pim  ·  Azure PIM  [DRY RUN]" if self.dry_run else "fzf-pim  ·  Azure PIM"
+            base = "fomo  ·  Azure PIM  [DRY RUN]" if self.dry_run else "fomo  ·  Azure PIM"
             self.call_from_thread(setattr, self, "title", f"{base}  ·  {user}  ·  {tenant}")
         except Exception:
             pass

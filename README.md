@@ -1,9 +1,9 @@
-# fzf-pim
+# fomo
 
 A terminal UI for activating Azure PIM eligible roles with multiselect.
 
 Azure (ARM) authentication is fully delegated to the active `az` CLI session.
-Entra role management uses Microsoft Graph via an OAuth 2.0 device code flow; the resulting refresh token is cached locally at `~/.cache/fzf-pim/graph_token.json` (mode `0600`) so the browser sign-in only runs once.
+Entra role management uses Microsoft Graph via an OAuth 2.0 device code flow; the resulting refresh token is cached locally at `~/.cache/fomo/graph_token.json` (mode `0600`) so the browser sign-in only runs once.
 
 ## Platform support
 
@@ -20,19 +20,19 @@ Works on Linux, macOS, and WSL (Windows Subsystem for Linux).
 **Using uv (recommended):**
 
 ```sh
-uv tool install git+https://github.com/jvik/fzf-pim
+uv tool install git+https://github.com/jvik/fomo
 ```
 
 **Using pipx:**
 
 ```sh
-pipx install git+https://github.com/jvik/fzf-pim
+pipx install git+https://github.com/jvik/fomo
 ```
 
-**From a specific release wheel** (find the versioned `.whl` on the [releases page](https://github.com/jvik/fzf-pim/releases/latest)):
+**From a specific release wheel** (find the versioned `.whl` on the [releases page](https://github.com/jvik/fomo/releases/latest)):
 
 ```sh
-uv tool install https://github.com/jvik/fzf-pim/releases/latest/download/fzf_pim-VERSION-py3-none-any.whl
+uv tool install https://github.com/jvik/fomo/releases/latest/download/fomo-VERSION-py3-none-any.whl
 ```
 
 ## Update
@@ -40,19 +40,19 @@ uv tool install https://github.com/jvik/fzf-pim/releases/latest/download/fzf_pim
 **Using uv:**
 
 ```sh
-uv tool upgrade fzf-pim
+uv tool upgrade fomo
 ```
 
 **Using pipx:**
 
 ```sh
-pipx upgrade fzf-pim
+pipx upgrade fomo
 ```
 
 ## Usage
 
 ```sh
-fzf-pim
+fomo
 ```
 
 The app opens a role-type selector. Choose between:
@@ -71,20 +71,20 @@ The app opens a role-type selector. Choose between:
 1. Select *Entra roles* from the main menu
 2. The app fetches your eligible directory roles via Microsoft Graph
    - On first use a **device code** sign-in prompt is shown; open the displayed URL, enter the code, and authenticate in your browser
-   - The refresh token is saved to `~/.cache/fzf-pim/graph_token.json` for future sessions
+   - The refresh token is saved to `~/.cache/fomo/graph_token.json` for future sessions
 3. Multiselect the roles to activate (already-active roles are marked)
 4. Choose a duration, enter a justification, and confirm
 
 **Dry-run mode** (no real API calls):
 
 ```sh
-fzf-pim --dry-run
+fomo --dry-run
 ```
 
 **Verbose logging** (write debug logs to a file):
 
 ```sh
-fzf-pim --log /tmp/fzf-pim.log
+fomo --log /tmp/fomo.log
 ```
 
 Logs include all `az rest` and Graph API calls and responses. Useful for troubleshooting.
@@ -96,19 +96,19 @@ Skip the TUI entirely by providing `-r`/`--reason` on the command line. Role and
 **Azure RBAC (subscription scope)** — provide `SUBSCRIPTION` and `ROLE` as positional arguments:
 
 ```sh
-fzf-pim my-sub "Key Vault Administrator" -r "Break-glass access" -t 1h
+fomo my-sub "Key Vault Administrator" -r "Break-glass access" -t 1h
 ```
 
 **Management group scope** — use `--mg` with the management group name:
 
 ```sh
-fzf-pim --mg my-mg "Reader" -r "Audit review" -t 30m
+fomo --mg my-mg "Reader" -r "Audit review" -t 30m
 ```
 
 **Entra ID roles** — use `--entra` with the role name:
 
 ```sh
-fzf-pim --entra "Global Reader" -r "Audit review" -t 1h
+fomo --entra "Global Reader" -r "Audit review" -t 1h
 ```
 
 The `-t`/`--time` flag accepts ISO 8601 durations (`PT1H`, `PT30M`) or shorthand (`1h`, `30m`). Defaults to `PT1H`.

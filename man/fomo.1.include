@@ -1,5 +1,5 @@
 [=DESCRIPTION]
-\fBfzf\-pim\fR is a terminal UI for activating Azure Privileged Identity
+\fBfomo\fR is a terminal UI for activating Azure Privileged Identity
 Management (PIM) eligible role assignments.
 The application queries all eligible role assignments for the signed-in
 account and presents them in an interactive, filterable checklist.
@@ -13,7 +13,7 @@ This is useful for scripting and automation.
 .PP
 Authentication is fully delegated to the active
 .BR az (1)
-CLI session — \fBfzf\-pim\fR never handles credentials or tokens directly.
+CLI session — \fBfomo\fR never handles credentials or tokens directly.
 Run
 .B az login
 before using this tool.
@@ -89,44 +89,44 @@ Jump to first / last item.
 [EXAMPLES]
 Launch the interactive TUI:
 .PP
-.B "    fzf-pim"
+.B "    fomo"
 .PP
 Simulate the full activation flow without making any Azure API calls
 (useful for testing or demonstrations):
 .PP
-.B "    fzf-pim --dry-run"
+.B "    fomo --dry-run"
 .PP
 Capture verbose debug output to a file for troubleshooting:
 .PP
-.B "    fzf-pim --log /tmp/fzf-pim.log"
+.B "    fomo --log /tmp/fomo.log"
 .PP
 Then inspect the log:
 .PP
-.B "    grep 'az rest' /tmp/fzf-pim.log"
+.B "    grep 'az rest' /tmp/fomo.log"
 .PP
 .B Non-interactive (CLI) mode
 .PP
 Activate an Azure RBAC role on a subscription without the TUI
 (SUBSCRIPTION and ROLE names accept substrings):
 .PP
-.B "    fzf-pim my-sub \"Key Vault Administrator\" -r \"Break-glass access\" -t 1h"
+.B "    fomo my-sub \"Key Vault Administrator\" -r \"Break-glass access\" -t 1h"
 .PP
 Activate a role scoped to a management group:
 .PP
-.B "    fzf-pim --mg my-mg \"Reader\" -r \"Audit review\" -t 30m"
+.B "    fomo --mg my-mg \"Reader\" -r \"Audit review\" -t 30m"
 .PP
 Activate a Microsoft Entra ID role:
 .PP
-.B "    fzf-pim --entra \"Global Reader\" -r \"Audit review\" -t 1h"
+.B "    fomo --entra \"Global Reader\" -r \"Audit review\" -t 1h"
 .PP
 Dry-run a CLI activation (no real API calls):
 .PP
-.B "    fzf-pim my-sub \"Contributor\" -r \"Test\" --dry-run"
+.B "    fomo my-sub \"Contributor\" -r \"Test\" --dry-run"
 
 [ENVIRONMENT]
 .TP
 .B AZURE_CLI
-\fBfzf\-pim\fR delegates all Azure API calls to the
+\fBfomo\fR delegates all Azure API calls to the
 .BR az (1)
 CLI.
 The
@@ -152,5 +152,5 @@ Azure CLI installation:
 .UE
 .PP
 Project homepage:
-.UR https://github.com/jvik/fzf-pim
+.UR https://github.com/jvik/fomo
 .UE

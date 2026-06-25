@@ -1,4 +1,4 @@
-/* fzf-pim global styles */
+/* fomo global styles */
 
 Screen {
     background: $surface;

@@ -1,7 +1,7 @@
 """AzTier blast-radius tiering for Azure and Entra roles.
 
 Data source: https://github.com/emiliensocchi/azure-tiering
-Fetched once and cached at ~/.cache/fzf-pim/tiering_{azure,entra}.json.
+Fetched once and cached at ~/.cache/fomo/tiering_{azure,entra}.json.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import TypedDict
 
 log = logging.getLogger(__name__)
 
-_CACHE_DIR = os.path.expanduser("~/.cache/fzf-pim")
+_CACHE_DIR = os.path.expanduser("~/.cache/fomo")
 _CACHE_TTL = 7 * 24 * 3600  # 1 week
 
 _AZURE_URL = (
@@ -88,7 +88,7 @@ def _save_disk_cache(kind: str, data: list) -> None:
 
 def _fetch_json(url: str) -> list | None:
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "fzf-pim/tiering"})
+        req = urllib.request.Request(url, headers={"User-Agent": "fomo/tiering"})
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())
     except Exception as exc:  # noqa: BLE001

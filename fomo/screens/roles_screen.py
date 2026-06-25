@@ -12,7 +12,7 @@ from textual.widgets._selection_list import Selection
 
 MAX_ROLES = 3
 
-from fzf_pim import azure, tiering
+from fomo import azure, tiering
 
 
 class RolesScreen(Screen):
@@ -361,5 +361,5 @@ class RolesScreen(Screen):
                 severity="warning",
                 timeout=8,
             )
-        from fzf_pim.screens.activation_screen import ActivationScreen
+        from fomo.screens.activation_screen import ActivationScreen
         self.app.push_screen(ActivationScreen(selected_roles))

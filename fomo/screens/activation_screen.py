@@ -12,7 +12,7 @@ from textual.coordinate import Coordinate
 from textual.screen import Screen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog, Select
 
-from fzf_pim import azure
+from fomo import azure
 
 log = logging.getLogger(__name__)
 

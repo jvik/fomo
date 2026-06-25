@@ -4,9 +4,9 @@ Guidelines for AI agents working in this repository.
 
 ## Project overview
 
-**fzf-pim** is a Textual TUI for activating Azure PIM eligible roles with multiselect.  
+**fomo** is a Textual TUI for activating Azure PIM eligible roles with multiselect.  
 Azure (ARM) authentication is fully delegated to the active `az` CLI session.  
-Entra role management uses Microsoft Graph via an OAuth 2.0 device code flow; the refresh token is cached at `~/.cache/fzf-pim/graph_token.json` (mode `0600`).
+Entra role management uses Microsoft Graph via an OAuth 2.0 device code flow; the refresh token is cached at `~/.cache/fomo/graph_token.json` (mode `0600`).
 
 ## Tech stack
 
@@ -18,15 +18,15 @@ Entra role management uses Microsoft Graph via an OAuth 2.0 device code flow; th
 ## Key commands
 
 ```sh
-uv run fzf-pim            # run the app
-uv run fzf-pim --dry-run  # simulate activation without calling Azure APIs
+uv run fomo            # run the app
+uv run fomo --dry-run  # simulate activation without calling Azure APIs
 uv run pytest             # run tests (if present)
 ```
 
 ## Project layout
 
 ```
-fzf_pim/
+fomo/
   __main__.py          # CLI entry point (argparse → PimApp)
   app.py               # PimApp(App) root, pushes ScopeScreen on mount
   app.tcss             # Textual CSS

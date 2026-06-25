@@ -7,7 +7,7 @@ try:
 except ModuleNotFoundError:
 	# Editable/source checkouts may not have generated _version.py.
 	try:
-		__version__ = package_version("fzf-pim")
+		__version__ = package_version("fomo")
 	except PackageNotFoundError:
 		__version__ = "0+unknown"
 

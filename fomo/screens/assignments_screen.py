@@ -12,7 +12,7 @@ from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Label, LoadingIndicator, TabbedContent, TabPane
 
-from fzf_pim import azure
+from fomo import azure
 
 log = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ class AssignmentsScreen(Screen):
         if azure.is_auth_error(msg):
             body = (
                 "[bold red]Azure session expired.[/bold red]\n\n"
-                "Run [bold]az login[/bold] in your terminal, then restart fzf-pim."
+                "Run [bold]az login[/bold] in your terminal, then restart fomo."
             )
         else:
             body = f"[bold red]Error:[/bold red] {msg}"
@@ -161,12 +161,12 @@ class AssignmentsScreen(Screen):
         if azure.is_auth_error(msg):
             body = (
                 "[bold red]Azure session expired.[/bold red]\n\n"
-                "Run [bold]az login[/bold] in your terminal, then restart fzf-pim."
+                "Run [bold]az login[/bold] in your terminal, then restart fomo."
             )
         elif azure.is_scope_error(msg):
             body = (
                 "[bold red]Missing Graph permissions.[/bold red]\n\n"
-                "Re-run [bold]fzf-pim --entra[/bold] to re-authorise."
+                "Re-run [bold]fomo --entra[/bold] to re-authorise."
             )
         else:
             wrapped = "\n".join(

@@ -403,7 +403,7 @@ _GRAPH = "https://graph.microsoft.com"
 # delegated PIM scopes in every tenant without requiring a separate app registration.
 _GRAPH_CLIENT_ID = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
 _GRAPH_SCOPES = "RoleManagement.ReadWrite.Directory offline_access"
-_TOKEN_CACHE_PATH = os.path.expanduser("~/.cache/fzf-pim/graph_token.json")
+_TOKEN_CACHE_PATH = os.path.expanduser("~/.cache/fomo/graph_token.json")
 
 # Module-level token cache: (access_token, expiry_unix_timestamp)
 _graph_token_cache: tuple[str, float] | None = None

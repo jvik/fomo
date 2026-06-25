@@ -1,4 +1,4 @@
-"""Hatchling build hook — generates the fzf-pim.1 man page at build time."""
+"""Hatchling build hook — generates the fomo.1 man page at build time."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ class CustomBuildHook(BuildHookInterface):
 
         # Load __main__ by exact file path so we always use the local source
         # tree regardless of what may be installed elsewhere on sys.path.
-        main_path = os.path.join(self.root, "fzf_pim", "__main__.py")
-        spec = importlib.util.spec_from_file_location("fzf_pim.__main__", main_path)
+        main_path = os.path.join(self.root, "fomo", "__main__.py")
+        spec = importlib.util.spec_from_file_location("fomo.__main__", main_path)
         if spec is None or spec.loader is None:
             raise ImportError(f"Cannot load module from {main_path}")
         module = importlib.util.module_from_spec(spec)
@@ -30,7 +30,7 @@ class CustomBuildHook(BuildHookInterface):
         parser = module.build_parser()
         parser.description = None
 
-        include_file = os.path.join(self.root, "man", "fzf-pim.1.include")
+        include_file = os.path.join(self.root, "man", "fomo.1.include")
         if not os.path.isfile(include_file):
             raise FileNotFoundError(
                 f"Man page include file not found: {include_file}"
@@ -40,12 +40,12 @@ class CustomBuildHook(BuildHookInterface):
             parser,
             format="pretty",
             _data={
-                "project_name": "fzf-pim",
-                "url": "https://github.com/mfyll/fzf-pim",
+                "project_name": "fomo",
+                "url": "https://github.com/jvik/fomo",
                 "description": "TUI for activating Azure PIM eligible roles with multiselect",
                 "authors": None,
                 "long_description": None,
-                "prog": "fzf-pim",
+                "prog": "fomo",
                 "version": version,
                 "manual_section": None,
                 "manual_title": None,
@@ -56,9 +56,9 @@ class CustomBuildHook(BuildHookInterface):
 
         man_dir = os.path.join(self.root, "man")
         os.makedirs(man_dir, exist_ok=True)
-        out_file = os.path.join(man_dir, "fzf-pim.1")
+        out_file = os.path.join(man_dir, "fomo.1")
         write_to_filename(str(manpage), out_file)
 
-        build_data.setdefault("shared_data", {})["man/fzf-pim.1"] = (
-            "share/man/man1/fzf-pim.1"
+        build_data.setdefault("shared_data", {})["man/fomo.1"] = (
+            "share/man/man1/fomo.1"
         )

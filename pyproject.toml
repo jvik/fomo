@@ -3,7 +3,7 @@ requires = ["hatchling", "hatch-vcs", "argparse-manpage"]
 build-backend = "hatchling.build"
 
 [project]
-name = "fzf-pim"
+name = "fomo"
 dynamic = ["version"]
 description = "TUI for Azure PIM role activation with multiselect"
 requires-python = ">=3.11"
@@ -15,15 +15,15 @@ dependencies = [
 dev = ["pytest"]
 
 [project.scripts]
-fzf-pim = "fzf_pim.__main__:main"
+fomo = "fomo.__main__:main"
 
 [tool.hatch.build.hooks.custom]
 
 [tool.hatch.build.targets.wheel]
-packages = ["fzf_pim"]
+packages = ["fomo"]
 
 [tool.hatch.version]
 source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
-version-file = "fzf_pim/_version.py"
+version-file = "fomo/_version.py"

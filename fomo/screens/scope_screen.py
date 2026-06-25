@@ -11,7 +11,7 @@ from textual.widgets import Footer, Header, Input, Label, LoadingIndicator, Sele
 
 MAX_SUBSCRIPTIONS = 3
 
-from fzf_pim import azure
+from fomo import azure
 
 
 class ScopeScreen(Screen):
@@ -84,7 +84,7 @@ class ScopeScreen(Screen):
         if azure.is_auth_error(msg):
             body = (
                 "[bold red]Azure session expired.[/bold red]\n\n"
-                "Run [bold]az login[/bold] in your terminal, then restart fzf-pim."
+                "Run [bold]az login[/bold] in your terminal, then restart fomo."
             )
         else:
             body = (
@@ -175,7 +175,7 @@ class ScopeScreen(Screen):
         if not selected_ids:
             self.notify("Select at least one subscription.", severity="warning")
             return
-        from fzf_pim.screens.roles_screen import RolesScreen
+        from fomo.screens.roles_screen import RolesScreen
         self.app.push_screen(RolesScreen(selected_ids))
 
     def action_select_focused(self) -> None:
@@ -191,11 +191,11 @@ class ScopeScreen(Screen):
         self.app.exit()
 
     def action_open_entra(self) -> None:
-        from fzf_pim.screens.entra_screen import EntraRolesScreen
+        from fomo.screens.entra_screen import EntraRolesScreen
         self.app.push_screen(EntraRolesScreen(pushed=True))
 
     def action_open_assignments(self) -> None:
-        from fzf_pim.screens.assignments_screen import AssignmentsScreen
+        from fomo.screens.assignments_screen import AssignmentsScreen
         self.app.push_screen(AssignmentsScreen())
 
     def action_vim_down(self) -> None:

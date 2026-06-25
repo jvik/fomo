@@ -1,4 +1,4 @@
-"""Entry point for fzf-pim."""
+"""Entry point for fomo."""
 
 from __future__ import annotations
 
@@ -10,19 +10,19 @@ import sys
 def build_parser() -> argparse.ArgumentParser:
     """Return the argument parser (used by argparse-manpage at build time)."""
     parser = argparse.ArgumentParser(
-        prog="fzf-pim",
+        prog="fomo",
         description="TUI for activating Azure PIM eligible roles with multiselect.",
         epilog=(
             "Authentication is fully delegated to the active 'az' CLI session. "
             "Run 'az login' before using this tool.\n\n"
             "Non-interactive (CLI-only) activation:\n"
-            "  Azure RBAC:  fzf-pim SUBSCRIPTION ROLE -r REASON [-t DURATION]\n"
-            "  Mgmt group:  fzf-pim --mg MG ROLE -r REASON [-t DURATION]\n"
-            "  Entra ID:    fzf-pim --entra ROLE -r REASON [-t DURATION]\n\n"
+            "  Azure RBAC:  fomo SUBSCRIPTION ROLE -r REASON [-t DURATION]\n"
+            "  Mgmt group:  fomo --mg MG ROLE -r REASON [-t DURATION]\n"
+            "  Entra ID:    fomo --entra ROLE -r REASON [-t DURATION]\n\n"
             "Examples:\n"
-            '  fzf-pim my-sub "Key Vault Administrator" -r "Break-glass" -t 30m\n'
-            '  fzf-pim --mg my-mg "Reader" -r "Audit review" -t 1h\n'
-            '  fzf-pim --entra "Global Reader" -r "Audit review" -t 1h'
+            '  fomo my-sub "Key Vault Administrator" -r "Break-glass" -t 30m\n'
+            '  fomo --mg my-mg "Reader" -r "Audit review" -t 1h\n'
+            '  fomo --entra "Global Reader" -r "Audit review" -t 1h'
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -78,7 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--log",
         metavar="FILE",
         default=None,
-        help="Write verbose debug logs to FILE (e.g. --log /tmp/fzf-pim.log).",
+        help="Write verbose debug logs to FILE (e.g. --log /tmp/fomo.log).",
     )
     return parser
 
@@ -91,7 +91,7 @@ def _cli_activate(
     dry_run: bool = False,
 ) -> None:
     """Non-interactive activation: find matching eligible roles and activate them."""
-    from fzf_pim import azure
+    from fomo import azure
 
     try:
         iso_duration = azure.parse_duration(duration)
@@ -182,7 +182,7 @@ def _cli_activate_mg(
     dry_run: bool = False,
 ) -> None:
     """Non-interactive activation scoped to a management group."""
-    from fzf_pim import azure
+    from fomo import azure
 
     try:
         iso_duration = azure.parse_duration(duration)
@@ -273,7 +273,7 @@ def _cli_activate_entra(
     dry_run: bool = False,
 ) -> None:
     """Non-interactive Entra activation: find matching eligible roles and activate them."""
-    from fzf_pim import azure
+    from fomo import azure
 
     try:
         iso_duration = azure.parse_duration(duration)
@@ -406,7 +406,7 @@ def main() -> None:
             "Positional arguments require --reason/-r for non-interactive activation"
         )
 
-    from fzf_pim.app import PimApp
+    from fomo.app import PimApp
 
     PimApp(dry_run=args.dry_run, entra=args.entra).run()
 

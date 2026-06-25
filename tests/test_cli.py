@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from fzf_pim.azure import parse_duration
-from fzf_pim.__main__ import build_parser
+from fomo.azure import parse_duration
+from fomo.__main__ import build_parser
 
 
 # ---------------------------------------------------------------------------
