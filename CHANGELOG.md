@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/jvik/fomo/compare/v1.11.0...v1.12.0) (2026-06-25)
+
+
+### Features
+
+* Add demo mode functionality with dummy data and screenshot generation ([f7f15fa](https://github.com/jvik/fomo/commit/f7f15fa22947a497b121e6bfb91b8a629b22552d))
+
 ## [1.11.0](https://github.com/jvik/fomo/compare/v1.10.0...v1.11.0) (2026-06-25)
 
 
