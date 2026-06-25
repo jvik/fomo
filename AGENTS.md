@@ -5,7 +5,8 @@ Guidelines for AI agents working in this repository.
 ## Project overview
 
 **fzf-pim** is a Textual TUI for activating Azure PIM eligible roles with multiselect.  
-Authentication is fully delegated to the active `az` CLI session — no credentials are managed by the app.
+Azure (ARM) authentication is fully delegated to the active `az` CLI session.  
+Entra role management uses Microsoft Graph via an OAuth 2.0 device code flow; the refresh token is cached at `~/.cache/fzf-pim/graph_token.json` (mode `0600`).
 
 ## Tech stack
 

@@ -2,7 +2,8 @@
 
 A terminal UI for activating Azure PIM eligible roles with multiselect.
 
-Authentication is fully delegated to the active `az` CLI session — no credentials are stored or managed by the app.
+Azure (ARM) authentication is fully delegated to the active `az` CLI session.
+Entra role management uses Microsoft Graph via an OAuth 2.0 device code flow; the resulting refresh token is cached locally at `~/.cache/fzf-pim/graph_token.json` (mode `0600`) so the browser sign-in only runs once.
 
 ## Platform support
 
@@ -69,7 +70,8 @@ The app opens a role-type selector. Choose between:
 
 1. Select *Entra roles* from the main menu
 2. The app fetches your eligible directory roles via Microsoft Graph
-   - If your `az` session lacks Graph access, a **device code** sign-in prompt is shown
+   - On first use a **device code** sign-in prompt is shown; open the displayed URL, enter the code, and authenticate in your browser
+   - The refresh token is saved to `~/.cache/fzf-pim/graph_token.json` for future sessions
 3. Multiselect the roles to activate (already-active roles are marked)
 4. Choose a duration, enter a justification, and confirm
 
