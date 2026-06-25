@@ -67,32 +67,11 @@ class AssignmentsScreen(Screen):
     @work(thread=True)
     def _load_azure(self) -> None:
         try:
-            subs = azure.list_subscriptions()
+            assignments = azure.list_active_arm_assignments()
         except Exception as exc:
             self.app.call_from_thread(self._on_azure_error, str(exc))
             return
-
-        if not subs:
-            self.app.call_from_thread(self._on_azure_done, [])
-            return
-
-        total = len(subs)
-        all_assignments: list[azure.ActiveAssignment] = []
-
-        for n, sub in enumerate(subs, start=1):
-            self.app.call_from_thread(self._update_azure_progress, n, total)
-            try:
-                assignments = azure.list_active_arm_assignments(sub.id)
-                all_assignments.extend(assignments)
-            except Exception as exc:
-                log.debug("skipping %s: %s", sub.id, exc)
-
-        self.app.call_from_thread(self._on_azure_done, all_assignments)
-
-    def _update_azure_progress(self, n: int, total: int) -> None:
-        self.query_one("#azure-loading", Label).update(
-            f"Loading Azure assignments… {n}/{total}"
-        )
+        self.app.call_from_thread(self._on_azure_done, assignments)
 
     def _on_azure_done(self, assignments: list[azure.ActiveAssignment]) -> None:
         self.query_one("#azure-spinner").display = False

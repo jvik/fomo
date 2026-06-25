@@ -607,29 +607,30 @@ def activate_entra_role(
 # Active assignment listings (for the Assignments screen)
 # ---------------------------------------------------------------------------
 
-def list_active_arm_assignments(subscription_id: str) -> list[ActiveAssignment]:
-    """List all active ARM role assignments for the current user in *subscription_id*.
+def list_active_arm_assignments() -> list[ActiveAssignment]:
+    """List all active ARM role assignments for the current user across all scopes.
 
-    Uses roleAssignmentScheduleInstances so that expiry and assignment type
-    (Assigned vs PIM-Activated) are available.
+    Uses the tenant-level roleAssignmentScheduleInstances endpoint with the
+    asTarget() filter so a single request returns assignments across every
+    subscription/resource-group/resource the caller can see.
     """
-    scope = f"/subscriptions/{subscription_id}"
     url = (
-        f"https://management.azure.com{scope}"
-        f"/providers/Microsoft.Authorization/roleAssignmentScheduleInstances"
-        f"?$filter=asTarget()&api-version=2020-10-01"
+        "https://management.azure.com"
+        "/providers/Microsoft.Authorization/roleAssignmentScheduleInstances"
+        "?$filter=asTarget()&api-version=2020-10-01"
     )
     data = _run_az("rest", "--method", "GET", "--url", url)
     assignments: list[ActiveAssignment] = []
     for item in data.get("value", []):
         props = item.get("properties", {})
         expanded = props.get("expandedProperties", {})
+        scope_id = expanded.get("scope", {}).get("id", "")
         assignments.append(
             ActiveAssignment(
                 role_name=expanded.get("roleDefinition", {}).get("displayName", "Unknown"),
-                scope=expanded.get("scope", {}).get("id") or scope,
+                scope=scope_id,
                 scope_display_name=(
-                    expanded.get("scope", {}).get("displayName") or subscription_id
+                    expanded.get("scope", {}).get("displayName") or scope_id
                 ),
                 expiry=props.get("endDateTime"),
                 assignment_type=props.get("assignmentType", "Assigned"),
