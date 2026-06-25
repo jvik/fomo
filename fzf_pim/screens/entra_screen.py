@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 from textual import on, work
 from textual.app import ComposeResult
@@ -43,7 +44,7 @@ class EntraRolesScreen(Screen):
 
     BINDINGS = [
         Binding("enter", "proceed", "Activate selected", show=True, priority=True),
-        Binding("escape", "app.pop_screen", "Back", show=True),
+        Binding("escape", "back", "Back", show=True),
         Binding("tab", "focus_list", "Next box", show=True),
         Binding("shift+tab", "focus_filter", "Prev box", show=True),
         Binding("slash", "focus_filter", "Filter", show=False),
@@ -54,12 +55,14 @@ class EntraRolesScreen(Screen):
         Binding("G", "vim_bottom", "Bottom", show=False),
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, pushed: bool = False) -> None:
         super().__init__()
+        self._pushed = pushed
         self.all_roles: list[azure.EntraEligibleRole] = []
         self._selected: set[int] = set()
         self._visible_indices: set[int] = set()
         self._rebuilding = False
+        self._stop_event = threading.Event()
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -77,6 +80,9 @@ class EntraRolesScreen(Screen):
         self.query_one("#status").display = False
         self._load_roles()
 
+    def on_unmount(self) -> None:
+        self._stop_event.set()
+
     @work(thread=True)
     def _load_roles(self) -> None:
         def _on_device_code(message: str) -> None:
@@ -91,7 +97,10 @@ class EntraRolesScreen(Screen):
             self.app.call_from_thread(_update)
 
         try:
-            roles = azure.list_entra_eligible_roles(on_device_code=_on_device_code)
+            roles = azure.list_entra_eligible_roles(
+                on_device_code=_on_device_code,
+                stop_event=self._stop_event,
+            )
             self.app.call_from_thread(self._on_roles_loaded, roles)
         except Exception as exc:
             self.app.call_from_thread(self._on_error, str(exc))
@@ -227,6 +236,12 @@ class EntraRolesScreen(Screen):
         w = self.focused
         if hasattr(w, "scroll_end"):
             w.scroll_end(animate=False)
+
+    def action_back(self) -> None:
+        if self._pushed:
+            self.app.pop_screen()
+        else:
+            self.app.exit()
 
 
 class EntraActivationScreen(Screen):

@@ -190,7 +190,7 @@ class ScopeScreen(Screen):
 
     def action_open_entra(self) -> None:
         from fzf_pim.screens.entra_screen import EntraRolesScreen
-        self.app.push_screen(EntraRolesScreen())
+        self.app.push_screen(EntraRolesScreen(pushed=True))
 
     def action_vim_down(self) -> None:
         w = self.focused

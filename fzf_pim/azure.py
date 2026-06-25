@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -356,6 +357,7 @@ def _try_refresh_token(tenant_id: str, refresh_token: str) -> dict | None:
 def _device_code_flow(
     tenant_id: str,
     on_device_code: Callable[[str], None] | None = None,
+    stop_event: threading.Event | None = None,
 ) -> dict:
     """Run the OAuth 2.0 device authorization grant and return the token dict.
 
@@ -389,7 +391,12 @@ def _device_code_flow(
     token_endpoint = _token_endpoint(tenant_id)
 
     while time.time() < deadline:
-        time.sleep(interval)
+        if stop_event is not None:
+            stop_event.wait(interval)
+            if stop_event.is_set():
+                raise RuntimeError("Authentication cancelled.")
+        else:
+            time.sleep(interval)
         poll_req = urllib.request.Request(
             token_endpoint,
             data=urllib.parse.urlencode({
@@ -425,6 +432,7 @@ def _device_code_flow(
 
 def _get_graph_token(
     on_device_code: Callable[[str], None] | None = None,
+    stop_event: threading.Event | None = None,
 ) -> str:
     """Return a bearer token for the Graph API.
 
@@ -457,7 +465,7 @@ def _get_graph_token(
     # 3. Interactive device code flow.
     tenant_id = _get_tenant_id()
     log.debug("starting device code flow for tenant %s", tenant_id)
-    token_data = _device_code_flow(tenant_id, on_device_code)
+    token_data = _device_code_flow(tenant_id, on_device_code, stop_event)
     expiry = now + float(token_data.get("expires_in", 3600)) - 60
     _graph_token_cache = (token_data["access_token"], expiry)
     _save_token_cache(token_data, tenant_id)
@@ -504,12 +512,13 @@ def _list_active_entra_role_def_ids(principal_id: str) -> frozenset[str]:
 
 def list_entra_eligible_roles(
     on_device_code: Callable[[str], None] | None = None,
+    stop_event: threading.Event | None = None,
 ) -> list[EntraEligibleRole]:
     """List eligible Entra PIM role assignments for the signed-in user."""
     user_id = get_current_user()
     # Acquire the token once (triggering device code if needed) so all
     # subsequent _run_graph calls hit the in-process cache silently.
-    _get_graph_token(on_device_code)
+    _get_graph_token(on_device_code, stop_event)
     active_def_ids = _list_active_entra_role_def_ids(user_id)
     filter_val = urllib.parse.quote(f"principalId eq '{user_id}'", safe="'()")
     url = (
