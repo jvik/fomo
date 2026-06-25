@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.1](https://github.com/jvik/fomo/compare/v1.13.0...v1.13.1) (2026-06-25)
+
+
+### Bug Fixes
+
+* borked apply in demo mode ([66ce036](https://github.com/jvik/fomo/commit/66ce03647a6720422caa866c3a80d14359ca279b))
+
 ## [1.13.0](https://github.com/jvik/fomo/compare/v1.12.0...v1.13.0) (2026-06-25)
 
 
