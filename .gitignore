@@ -34,6 +34,7 @@ uv.lock
 # Generated artifacts
 man/*.1
 log.log
+fzf_pim/_version.py
 
 # Testing
 .tox/

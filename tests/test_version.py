@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fzf_pim._version import __version__
+from fzf_pim import __version__
 
 
 def test_version_exists() -> None:
