@@ -138,6 +138,29 @@ def validate_duration(s: str) -> bool:
     return bool(_DURATION_RE.match(s)) and s not in ("P", "PT")
 
 
+def parse_duration(s: str) -> str:
+    """Parse a human-friendly duration string to ISO 8601.
+
+    Accepts ISO 8601 directly (e.g. ``PT1H``) or shorthand such as
+    ``30m``, ``1h``, ``1h30m`` (case-insensitive).
+
+    Raises :exc:`ValueError` for unrecognised input.
+    """
+    if validate_duration(s):
+        return s
+    m = re.fullmatch(r"(?:(\d+)h)?(?:(\d+)m)?", s.lower())
+    if m and (m.group(1) or m.group(2)):
+        result = "PT"
+        if m.group(1):
+            result += f"{m.group(1)}H"
+        if m.group(2):
+            result += f"{m.group(2)}M"
+        return result
+    raise ValueError(
+        f"Invalid duration {s!r}. Use e.g. '30m', '1h', '1h30m', or ISO 8601 like 'PT1H'."
+    )
+
+
 def format_expiry(expiry: str | None) -> str:
     """Shorten an ISO 8601 datetime to YYYY-MM-DD, or return 'Permanent'."""
     if not expiry:
