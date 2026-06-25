@@ -110,6 +110,18 @@ class RolesScreen(Screen):
                 timeout=10,
             )
             return
+        # Deduplicate: same role on the same scope may appear once per queried subscription.
+        # role_definition_id is a full resource path that includes the subscription ID,
+        # so extract just the trailing GUID for the comparison key.
+        seen: set[tuple[str, str]] = set()
+        unique: list[azure.EligibleRole] = []
+        for r in self.all_roles:
+            role_guid = r.role_definition_id.rsplit("/", 1)[-1]
+            key = (role_guid, r.scope)
+            if key not in seen:
+                seen.add(key)
+                unique.append(r)
+        self.all_roles = unique
         self.all_roles.sort(key=lambda r: (r.role_name, r.scope_display_name))
         self.query_one("#filter").display = True
         self.query_one("#role-list").display = True
