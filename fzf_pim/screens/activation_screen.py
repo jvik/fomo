@@ -228,5 +228,9 @@ class ActivationScreen(Screen):
     # ------------------------------------------------------------------
 
     def action_back(self) -> None:
+        if isinstance(self.focused, Input):
+            # First Esc: blur the input, keep text intact
+            self.focused.blur()
+            return
         if not self._activating:
             self.app.pop_screen()

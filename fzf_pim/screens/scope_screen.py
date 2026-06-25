@@ -122,7 +122,7 @@ class ScopeScreen(Screen):
         if n == 0:
             label.update("[dim]No subscriptions selected[/dim]")
         elif n > MAX_SUBSCRIPTIONS:
-            label.update(f"[bold yellow]{n} subscriptions selected[/bold yellow]  [yellow](warning: >{MAX_SUBSCRIPTIONS})[/yellow]")
+            label.update(f"[bold]{n} subscriptions selected[/bold]  [bold red](warning: >{MAX_SUBSCRIPTIONS})[/bold red]")
         else:
             label.update(f"[bold]{n}[/bold] subscription(s) selected")
 
