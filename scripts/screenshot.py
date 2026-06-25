@@ -127,8 +127,18 @@ async def take_activation_screen(out: Path) -> None:
         )
 
         await pilot.pause(0.1)
-        app.save_screenshot(str(out / "03-activation.svg"))
-        print(f"  ✓  {out / '03-activation.svg'}")
+
+        # Click Activate and wait for the worker to finish (button label → "Done")
+        await pilot.click("#btn-activate")
+        await _wait_for(
+            pilot,
+            lambda: app.screen.query_one("#btn-back").label == "Done",
+            steps=120,
+        )
+        await pilot.pause(0.15)
+        app.save_screenshot(str(out / "03-activation-done.svg"))
+        print(f"  ✓  {out / '03-activation-done.svg'}")
+
 
 
 async def take_entra_screen(out: Path) -> None:

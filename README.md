@@ -25,7 +25,7 @@ A terminal UI for activating Azure PIM eligible roles with multiselect.
 
 ### Activation
 
-![Activation screen](docs/screenshots/03-activation.svg)
+![Activation screen](docs/screenshots/03-activation-done.svg)
 
 ### Entra roles
 
