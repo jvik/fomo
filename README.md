@@ -54,9 +54,24 @@ pipx upgrade fzf-pim
 fzf-pim
 ```
 
+The app opens a role-type selector. Choose between:
+
+- **Azure roles** — subscription/resource-scoped PIM roles via Azure ARM
+- **Entra roles** — Microsoft Entra directory roles (Global Administrator, etc.) via Microsoft Graph
+
+### Azure roles
+
 1. Select a subscription scope
 2. Multiselect the eligible roles to activate
 3. Enter a justification and confirm — activation runs in parallel
+
+### Entra roles
+
+1. Select *Entra roles* from the main menu
+2. The app fetches your eligible directory roles via Microsoft Graph
+   - If your `az` session lacks Graph access, a **device code** sign-in prompt is shown
+3. Multiselect the roles to activate (already-active roles are marked)
+4. Choose a duration, enter a justification, and confirm
 
 **Dry-run mode** (no real API calls):
 
@@ -70,4 +85,4 @@ fzf-pim --dry-run
 fzf-pim --log /tmp/fzf-pim.log
 ```
 
-Logs include all `az rest` calls and responses. Useful for troubleshooting.
+Logs include all `az rest` and Graph API calls and responses. Useful for troubleshooting.
