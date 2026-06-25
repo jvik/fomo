@@ -88,3 +88,29 @@ fzf-pim --log /tmp/fzf-pim.log
 ```
 
 Logs include all `az rest` and Graph API calls and responses. Useful for troubleshooting.
+
+### Non-interactive (CLI) mode
+
+Skip the TUI entirely by providing `-r`/`--reason` on the command line. Role and subscription names accept substrings; the first exact match wins, otherwise the first substring match.
+
+**Azure RBAC (subscription scope)** — provide `SUBSCRIPTION` and `ROLE` as positional arguments:
+
+```sh
+fzf-pim my-sub "Key Vault Administrator" -r "Break-glass access" -t 1h
+```
+
+**Management group scope** — use `--mg` with the management group name:
+
+```sh
+fzf-pim --mg my-mg "Reader" -r "Audit review" -t 30m
+```
+
+**Entra ID roles** — use `--entra` with the role name:
+
+```sh
+fzf-pim --entra "Global Reader" -r "Audit review" -t 1h
+```
+
+The `-t`/`--time` flag accepts ISO 8601 durations (`PT1H`, `PT30M`) or shorthand (`1h`, `30m`). Defaults to `PT1H`.
+
+All three forms respect `--dry-run` to simulate activation without API calls.

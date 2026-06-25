@@ -7,6 +7,10 @@ Multiple roles can be selected and activated in a single operation;
 each activation request is submitted in parallel so the overall wait
 time is bounded by the slowest individual role.
 .PP
+A non-interactive (CLI) mode is available when \fB\-r\fR/\fB\-\-reason\fR is
+supplied on the command line together with the role and scope arguments.
+This is useful for scripting and automation.
+.PP
 Authentication is fully delegated to the active
 .BR az (1)
 CLI session — \fBfzf\-pim\fR never handles credentials or tokens directly.
@@ -99,6 +103,25 @@ Capture verbose debug output to a file for troubleshooting:
 Then inspect the log:
 .PP
 .B "    grep 'az rest' /tmp/fzf-pim.log"
+.PP
+.B Non-interactive (CLI) mode
+.PP
+Activate an Azure RBAC role on a subscription without the TUI
+(SUBSCRIPTION and ROLE names accept substrings):
+.PP
+.B "    fzf-pim my-sub \"Key Vault Administrator\" -r \"Break-glass access\" -t 1h"
+.PP
+Activate a role scoped to a management group:
+.PP
+.B "    fzf-pim --mg my-mg \"Reader\" -r \"Audit review\" -t 30m"
+.PP
+Activate a Microsoft Entra ID role:
+.PP
+.B "    fzf-pim --entra \"Global Reader\" -r \"Audit review\" -t 1h"
+.PP
+Dry-run a CLI activation (no real API calls):
+.PP
+.B "    fzf-pim my-sub \"Contributor\" -r \"Test\" --dry-run"
 
 [ENVIRONMENT]
 .TP
