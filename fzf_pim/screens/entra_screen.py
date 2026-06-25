@@ -44,7 +44,7 @@ class EntraRolesScreen(Screen):
 
     BINDINGS = [
         Binding("enter", "proceed", "Activate selected", show=True, priority=True),
-        Binding("escape", "back", "Back", show=True),
+        Binding("escape", "back", "Back", show=True, priority=True),
         Binding("tab", "focus_list", "Next box", show=True),
         Binding("shift+tab", "focus_filter", "Prev box", show=True),
         Binding("slash", "focus_filter", "Filter", show=False),
@@ -248,7 +248,7 @@ class EntraActivationScreen(Screen):
     """Fill in justification + duration, then activate selected Entra roles."""
 
     BINDINGS = [
-        Binding("escape", "back", "Back", show=True),
+        Binding("escape", "back", "Back", show=True, priority=True),
     ]
 
     def __init__(self, roles: list[azure.EntraEligibleRole]) -> None:

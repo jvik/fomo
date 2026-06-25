@@ -22,7 +22,7 @@ class ScopeScreen(Screen):
         Binding("slash", "focus_filter", "Filter", show=True),
         Binding("tab", "focus_list", "Next box", show=True),
         Binding("shift+tab", "focus_filter", "Prev box", show=True),
-        Binding("escape", "escape_key", "Back to filter", show=False),
+        Binding("escape", "escape_key", "Back to filter", show=False, priority=True),
         Binding("a", "select_all", "All", show=True),
         Binding("n", "select_none", "None", show=True),
         Binding("e", "open_entra", "Entra", show=True),
@@ -148,7 +148,9 @@ class ScopeScreen(Screen):
         self.query_one("#sub-list").focus()
 
     def action_escape_key(self) -> None:
-        if self.focused is not self.query_one("#filter"):
+        if self.focused is self.query_one("#filter"):
+            self.query_one("#sub-list").focus()
+        else:
             self.query_one("#filter").focus()
 
     def action_select_all(self) -> None:

@@ -20,7 +20,7 @@ class RolesScreen(Screen):
 
     BINDINGS = [
         Binding("enter", "proceed", "Activate selected", show=True, priority=True),
-        Binding("escape", "app.pop_screen", "Back", show=True),
+        Binding("escape", "app.pop_screen", "Back", show=True, priority=True),
         Binding("q", "app.pop_screen", "Back", show=False),
         Binding("tab", "focus_list", "Next box", show=True),
         Binding("shift+tab", "focus_filter", "Prev box", show=True),
