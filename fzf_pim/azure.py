@@ -138,9 +138,9 @@ def validate_duration(s: str) -> bool:
 
 
 def format_expiry(expiry: str | None) -> str:
-    """Shorten an ISO 8601 datetime to YYYY-MM-DD, or return '—'."""
+    """Shorten an ISO 8601 datetime to YYYY-MM-DD, or return 'Permanent'."""
     if not expiry:
-        return "—"
+        return "Permanent"
     return expiry[:10]
 
 

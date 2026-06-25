@@ -146,8 +146,8 @@ class EntraRolesScreen(Screen):
         for idx, role in enumerate(self.all_roles):
             if q and q not in role.role_name.lower():
                 continue
-            active_tag = " [dim](active)[/dim]" if role.is_active else ""
-            expiry_tag = f"  [dim]{azure.format_expiry(role.expiry)}[/dim]"
+            active_tag = " [bold green](active)[/bold green]" if role.is_active else ""
+            expiry_tag = f" [dim]- {azure.format_expiry(role.expiry)}[/dim]"
             label = f"{role.role_name}{active_tag}{expiry_tag}"
             sl.add_option(Selection(label, idx, idx in self._selected))
             self._visible_indices.add(idx)
