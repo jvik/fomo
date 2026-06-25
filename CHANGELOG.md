@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.0](https://github.com/jvik/fzf-pim/compare/v1.5.0...v1.6.0) (2026-06-25)
+
+
+### Features
+
+* add duplicate binding for 'q' key to navigate back in roles screen ([032e6a4](https://github.com/jvik/fzf-pim/commit/032e6a46b0d5a02780fa16c17b05af8b6129c28c))
+* add toggle selection with 'x' key in roles and scope screens ([9942423](https://github.com/jvik/fzf-pim/commit/9942423caf8eb9716f8014e92d5ce9a5ecce469e))
+* deduplicate roles in roles screen based on role GUID and scope ([2e6e14f](https://github.com/jvik/fzf-pim/commit/2e6e14f6e2b16a695388339a0425224e907001dd))
+
 ## [1.5.0](https://github.com/jvik/fzf-pim/compare/v1.4.1...v1.5.0) (2026-06-24)
 
 
