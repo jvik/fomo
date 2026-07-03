@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0](https://github.com/jvik/fomo/compare/v1.14.0...v1.15.0) (2026-07-03)
+
+
+### Features
+
+* auth error modal and consistent circle selection indicators ([a9e5234](https://github.com/jvik/fomo/commit/a9e5234a1e60ef04b30802c7c5e59d2210cb6b87))
+
 ## [1.14.0](https://github.com/jvik/fomo/compare/v1.13.1...v1.14.0) (2026-07-03)
 
 
