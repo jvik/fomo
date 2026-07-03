@@ -136,6 +136,13 @@ DataTable {
     height: 1fr;
 }
 
+#tab-hint {
+    height: 1;
+    padding: 0 1;
+    color: $text-muted;
+    background: $panel;
+}
+
 /* Entra tab pane within ScopeScreen */
 #entra-loading-area {
     padding: 1 2;

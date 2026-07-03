@@ -18,6 +18,7 @@ from textual.widgets import (
     SelectionList,
     TabbedContent,
     TabPane,
+    Tabs,
 )
 from textual.widgets._selection_list import Selection
 
@@ -39,6 +40,8 @@ class ScopeScreen(Screen):
         Binding("n", "select_none", "None", show=True),
         Binding("i", "open_assignments", "Assignments", show=True),
         Binding("q", "quit_app", "Quit", show=True),
+        Binding("up", "arrow_up", "↑", show=False),
+        Binding("down", "arrow_down", "↓", show=False),
         Binding("h", "prev_tab", "← Tab", show=False),
         Binding("l", "next_tab", "→ Tab", show=False),
         Binding("j", "vim_down", "↓", show=False),
@@ -89,6 +92,7 @@ class ScopeScreen(Screen):
                             "[dim]Navigate the list to see role details.[/dim]",
                             id="entra-detail",
                         )
+        yield Label("[bold]←/→[/bold] switch tab  •  [bold]Tab[/bold] enter list", id="tab-hint")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -100,6 +104,7 @@ class ScopeScreen(Screen):
         self._load_subs()
         if self._initial_tab == "tab-entra":
             self._start_entra_load()
+        self.call_after_refresh(self.query_one("#scope-tabs").focus)
 
     def on_unmount(self) -> None:
         self._stop_event.set()
@@ -123,6 +128,12 @@ class ScopeScreen(Screen):
     def on_tab_activated(self, event: TabbedContent.TabActivated) -> None:
         if event.pane.id == "tab-entra" and not self._entra_loaded and not self._entra_loading:
             self._start_entra_load()
+
+    def watch_focused(self, focused) -> None:
+        try:
+            self.query_one("#tab-hint").display = isinstance(focused, Tabs)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Azure — subscription loading
@@ -152,7 +163,7 @@ class ScopeScreen(Screen):
         sl.display = True
         self.query_one("#sel-count").display = True
         self._update_sel_count()
-        sl.focus()
+        self.query_one("#scope-tabs").focus()
 
     def _show_error(self, msg: str) -> None:
         self.query_one("#spinner").display = False
@@ -270,7 +281,8 @@ class ScopeScreen(Screen):
         self.query_one("#entra-loading-area").display = False
         self.query_one("#entra-split").display = True
         self._rebuild_entra_list("")
-        self.query_one("#entra-role-list").focus()
+        if self._initial_tab == "tab-entra":
+            self.query_one("#entra-role-list").focus()
         self._update_entra_status()
 
     def _on_entra_error(self, msg: str) -> None:
@@ -440,6 +452,9 @@ class ScopeScreen(Screen):
             self.query_one("#sub-list", SelectionList).deselect_all()
 
     def action_proceed(self) -> None:
+        if isinstance(self.focused, Tabs):
+            self.action_focus_filter()
+            return
         if self._active_tab() == "tab-entra":
             if self.focused is self.query_one("#entra-filter"):
                 self.query_one("#entra-role-list").focus()
@@ -494,6 +509,12 @@ class ScopeScreen(Screen):
     # ------------------------------------------------------------------
     # Vim-style navigation (focus-based, works for both tabs)
     # ------------------------------------------------------------------
+
+    def action_arrow_down(self) -> None:
+        self.focus_next()
+
+    def action_arrow_up(self) -> None:
+        self.focus_previous()
 
     def action_vim_down(self) -> None:
         w = self.focused
