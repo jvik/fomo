@@ -15,11 +15,12 @@ from textual.widgets import (
     Input,
     Label,
     LoadingIndicator,
-    SelectionList,
     TabbedContent,
     TabPane,
     Tabs,
 )
+
+from fomo.widgets import FomoSelectionList as SelectionList
 from textual.widgets._selection_list import Selection
 
 from rich.text import Text

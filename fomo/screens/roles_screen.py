@@ -7,7 +7,8 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Input, Label, LoadingIndicator, SelectionList
+from textual.widgets import Footer, Header, Input, Label, LoadingIndicator
+from fomo.widgets import FomoSelectionList as SelectionList
 from textual.widgets._selection_list import Selection
 
 MAX_ROLES = 3
@@ -98,11 +99,8 @@ class RolesScreen(Screen):
         if azure.is_auth_error(msg):
             if not self._auth_error_shown:
                 self._auth_error_shown = True
-                self.notify(
-                    "Azure session expired. Run [bold]az login[/bold] and restart.",
-                    severity="error",
-                    timeout=30,
-                )
+                from fomo.app import AuthErrorModal
+                self.app.push_screen(AuthErrorModal())
         else:
             self.notify(f"[{sub_id[:8]}…] {msg}", severity="error", timeout=8)
         self._increment_loaded()

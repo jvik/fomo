@@ -203,6 +203,15 @@ def get_current_user() -> str:
     return data["id"]
 
 
+def check_auth() -> None:
+    """Verify the az CLI session is valid by requesting a fresh token.
+
+    Unlike `az account show`, this actually attempts a token refresh and
+    will raise RuntimeError if the session has expired.
+    """
+    _run_az("account", "get-access-token")
+
+
 def get_account_info() -> tuple[str, str]:
     """Return (user_name, tenant_display_name) from the active az session."""
     data = _run_az("account", "show")

@@ -5,8 +5,12 @@ from __future__ import annotations
 import os
 import subprocess
 
-from textual.app import App
+from textual import on
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, Vertical
+from textual.screen import ModalScreen
 from textual.theme import Theme
+from textual.widgets import Button, Label
 from textual.worker import get_current_worker
 
 from fomo import azure
@@ -24,6 +28,7 @@ FOMO_DARK = Theme(
     warning="#ffa62b",
     error="#e05450",
     dark=True,
+    variables={"block-cursor-foreground": "#ffffff"},
 )
 
 FOMO_LIGHT = Theme(
@@ -38,7 +43,52 @@ FOMO_LIGHT = Theme(
     warning="#e65100",
     error="#c62828",
     dark=False,
+    variables={"block-cursor-foreground": "#ffffff"},
 )
+
+
+class AuthErrorModal(ModalScreen):
+    """Persistent modal shown when the az CLI session has expired."""
+
+    BINDINGS = [
+        ("escape", "dismiss", "Dismiss"),
+        ("q", "quit_app", "Quit"),
+        ("ctrl+c", "quit_app", "Quit"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="auth-error-dialog"):
+            yield Label("Azure session expired", id="auth-error-title")
+            yield Label(
+                "Run [bold]az login[/bold] in your terminal, then restart fomo.",
+                id="auth-error-body",
+            )
+            with Horizontal(id="auth-error-buttons"):
+                yield Button("Dismiss", variant="default", id="auth-error-ok")
+                yield Button("Quit", variant="error", id="auth-error-quit")
+
+    def on_mount(self) -> None:
+        self.query_one("#auth-error-ok").focus()
+
+    def on_key(self, event) -> None:
+        if event.key in ("left", "right"):
+            focused = self.focused
+            if focused and focused.id == "auth-error-ok":
+                self.query_one("#auth-error-quit").focus()
+            else:
+                self.query_one("#auth-error-ok").focus()
+            event.stop()
+
+    @on(Button.Pressed, "#auth-error-ok")
+    def _ok(self) -> None:
+        self.dismiss()
+
+    def action_quit_app(self) -> None:
+        self.app.exit()
+
+    @on(Button.Pressed, "#auth-error-quit")
+    def _quit(self) -> None:
+        self.app.exit()
 
 
 def _system_is_dark() -> bool:
@@ -164,11 +214,13 @@ class PimApp(App):
             )
             return
         try:
+            azure.check_auth()
             user, tenant = azure.get_account_info()
             base = "fomo  ·  Azure PIM  [DRY RUN]" if self.dry_run else "fomo  ·  Azure PIM"
             self.call_from_thread(setattr, self, "title", f"{base}  ·  {user}  ·  {tenant}")
-        except Exception:
-            pass
+        except Exception as exc:
+            if azure.is_auth_error(str(exc)):
+                self.call_from_thread(self.push_screen, AuthErrorModal())
 
     def on_unmount(self) -> None:
         if self._color_scheme_proc is not None:
