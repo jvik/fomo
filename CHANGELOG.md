@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.0](https://github.com/jvik/fomo/compare/v1.13.1...v1.14.0) (2026-07-03)
+
+
+### Features
+
+* show tab-hint only when Tabs widget is focused ([f079fb0](https://github.com/jvik/fomo/commit/f079fb089460d4eccb808afd415e2ad82c7cca26))
+
 ## [1.13.1](https://github.com/jvik/fomo/compare/v1.13.0...v1.13.1) (2026-06-25)
 
 
