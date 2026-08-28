@@ -58,6 +58,7 @@ class ScopeScreen(Screen):
         # Azure tab state
         self._all_subs: list[azure.Subscription] = []
         self._visible_ids: set[str] = set()
+        self._selected_ids: set[str] = set()
         self._rebuilding = False
         # Entra tab state
         self._entra_loaded = False
@@ -186,7 +187,6 @@ class ScopeScreen(Screen):
 
     def _rebuild_list(self, query: str) -> None:
         sl = self.query_one("#sub-list", SelectionList)
-        current_selected: set[str] = set(sl.selected)
         self._rebuilding = True
         sl.clear_options()
         self._visible_ids = set()
@@ -195,17 +195,22 @@ class ScopeScreen(Screen):
             display = f"{sub.name}  [dim]{sub.id}[/dim]"
             if q and q not in f"{sub.name} {sub.id}".lower():
                 continue
-            sl.add_option((display, sub.id, sub.id in current_selected))
+            sl.add_option((display, sub.id, sub.id in self._selected_ids))
             self._visible_ids.add(sub.id)
         self._rebuilding = False
 
     @on(SelectionList.SelectedChanged, "#sub-list")
-    def on_sub_selection_changed(self, event: SelectionList.SelectedChanged) -> None:  # noqa: ARG002
-        if not self._rebuilding:
-            self._update_sel_count()
+    def on_sub_selection_changed(self, event: SelectionList.SelectedChanged) -> None:
+        if self._rebuilding:
+            return
+        visible_selected: set[str] = set(event.selection_list.selected)
+        visible_unselected = self._visible_ids - visible_selected
+        self._selected_ids |= visible_selected
+        self._selected_ids -= visible_unselected
+        self._update_sel_count()
 
     def _update_sel_count(self) -> None:
-        n = len(self.query_one("#sub-list", SelectionList).selected)
+        n = len(self._selected_ids)
         label = self.query_one("#sel-count", Label)
         if n == 0:
             label.update("[dim]No subscriptions selected[/dim]")
@@ -224,6 +229,7 @@ class ScopeScreen(Screen):
         self.query_one("#sub-list").focus()
 
     def _select_all_subs_visible(self) -> None:
+        self._selected_ids.update(self._visible_ids)
         sl = self.query_one("#sub-list", SelectionList)
         self._rebuilding = True
         sl.select_all()
@@ -450,6 +456,7 @@ class ScopeScreen(Screen):
             self._entra_rebuilding = False
             self._update_entra_status()
         else:
+            self._selected_ids.clear()
             self.query_one("#sub-list", SelectionList).deselect_all()
 
     def action_proceed(self) -> None:
@@ -483,7 +490,7 @@ class ScopeScreen(Screen):
                 self.action_focus_list()
                 return
             sl = self.query_one("#sub-list", SelectionList)
-            selected_ids: list[str] = list(sl.selected)
+            selected_ids: list[str] = list(self._selected_ids)
             if not selected_ids:
                 self.notify("Select at least one subscription.", severity="warning")
                 return
