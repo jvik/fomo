@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.15.1](https://github.com/jvik/fomo/compare/v1.15.0...v1.15.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* preserve subscription selection state across search filter changes ([681853f](https://github.com/jvik/fomo/commit/681853f92a86d02bc607947090a7e189f71951f8))
+* preserve subscription selection state across search filter changes ([88f8583](https://github.com/jvik/fomo/commit/88f8583416405b2af8963a2cf52b276ff2563a77)), closes [#35](https://github.com/jvik/fomo/issues/35)
+
 ## [1.15.0](https://github.com/jvik/fomo/compare/v1.14.0...v1.15.0) (2026-07-03)
 
 
