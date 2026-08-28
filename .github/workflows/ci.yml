@@ -22,4 +22,3 @@ jobs:
 
             - name: Run tests
               run: uv run --group dev pytest --tb=short -q
-              continue-on-error: true # remove once tests exist
