@@ -133,3 +133,4 @@ fomo --entra "Global Reader" -r "Audit review" -t 1h
 The `-t`/`--time` flag accepts ISO 8601 durations (`PT1H`, `PT30M`) or shorthand (`1h`, `30m`). Defaults to `PT1H`.
 
 All three forms respect `--dry-run` to simulate activation without API calls.
+
