@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.16.0](https://github.com/jvik/fomo/compare/v1.15.1...v1.16.0) (2026-10-13)
+
+
+### Features
+
+* add sortable lists with Ctrl+S ([#42](https://github.com/jvik/fomo/issues/42)) ([4fa991b](https://github.com/jvik/fomo/commit/4fa991bcec4287064d22da7a6b27a31bffe4fe7d))
+
 ## [1.15.1](https://github.com/jvik/fomo/compare/v1.15.0...v1.15.1) (2026-08-28)
 
 
