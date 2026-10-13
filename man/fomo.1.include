@@ -53,6 +53,10 @@ Select all subscriptions.
 .B n
 Deselect all subscriptions.
 .TP
+.B Ctrl\-s
+Toggle subscription sort (A\(->Z / Z\(->A) on the Azure tab, or cycle the
+Entra role sort order (name, tier, expiry) on the Entra tab.
+.TP
 .BR Ctrl\-a
 Select all visible (filtered) subscriptions.
 .TP
@@ -68,6 +72,9 @@ Proceed to the activation screen with the selected roles.
 .TP
 .BR Ctrl\-a
 Select all visible (filtered) roles.
+.TP
+.B Ctrl\-s
+Cycle the sort order (name, scope, tier, expiry). Defaults to alphabetical.
 .TP
 .B /\fR,\fB\ Tab
 Move focus to the filter input.
