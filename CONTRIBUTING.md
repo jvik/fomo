@@ -22,6 +22,17 @@ uv run fomo --demo       # loads dummy data, no Azure account needed
 uv run pytest
 ```
 
+## Common chores
+
+Recipes live in the [justfile](justfile) (requires [just](https://github.com/casey/just)). Run `just` to list them.
+
+```sh
+just test          # run tests
+just demo          # run app with dummy data
+just screenshots   # regenerate docs/screenshots/*.svg
+just build         # build sdist + wheel
+```
+
 ## Code conventions
 
 - `from __future__ import annotations` at the top of every module.

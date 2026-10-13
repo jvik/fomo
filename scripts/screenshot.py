@@ -25,6 +25,19 @@ OUT = Path(__file__).parent.parent / "docs" / "screenshots"
 COLS, ROWS = 120, 36
 
 
+def _make_app():
+    """Create a demo PimApp that always renders with the dark theme.
+
+    Ignores the OS colour scheme and disables the live dbus theme watcher so
+    screenshots are reproducible regardless of the machine they run on.
+    """
+    from fomo import app as app_module
+
+    app_module._system_is_dark = lambda: True
+    app_module.PimApp._watch_color_scheme = lambda self: None
+    return app_module.PimApp(demo_mode=True, dry_run=True)
+
+
 def _sl(app, selector: str) -> SelectionList:
     """Query the current screen for a SelectionList (Textual 8.x: use app.screen)."""
     return app.screen.query_one(selector, SelectionList)
@@ -50,9 +63,7 @@ async def _wait_for(pilot, condition_fn, *, steps: int = 80) -> None:
 
 async def take_scope_screen(out: Path) -> None:
     """Subscription selection screen with three subs selected."""
-    from fomo.app import PimApp
-
-    app = PimApp(demo_mode=True, dry_run=True)
+    app = _make_app()
     async with app.run_test(size=(COLS, ROWS)) as pilot:
         await _wait_for(pilot, lambda: _has_options(app, "#sub-list"))
 
@@ -68,15 +79,14 @@ async def take_scope_screen(out: Path) -> None:
 
 async def take_roles_screen(out: Path) -> None:
     """Role multiselect screen — roles loaded, a few selected."""
-    from fomo.app import PimApp
-
-    app = PimApp(demo_mode=True, dry_run=True)
+    app = _make_app()
     async with app.run_test(size=(COLS, ROWS)) as pilot:
         await _wait_for(pilot, lambda: _has_options(app, "#sub-list"))
 
         sl = _sl(app, "#sub-list")
         for i in range(sl.option_count):
             sl.select(sl.get_option_at_index(i))
+        sl.focus()          # focus starts on the tab bar, where enter only moves to the filter
         await pilot.pause(0.05)
         await pilot.press("enter")
 
@@ -98,15 +108,14 @@ async def take_roles_screen(out: Path) -> None:
 
 async def take_activation_screen(out: Path) -> None:
     """Activation form — roles table + justification input filled in."""
-    from fomo.app import PimApp
-
-    app = PimApp(demo_mode=True, dry_run=True)
+    app = _make_app()
     async with app.run_test(size=(COLS, ROWS)) as pilot:
         await _wait_for(pilot, lambda: _has_options(app, "#sub-list"))
 
         sl = _sl(app, "#sub-list")
         for i in range(sl.option_count):
             sl.select(sl.get_option_at_index(i))
+        sl.focus()
         await pilot.pause(0.05)
         await pilot.press("enter")
 
@@ -143,9 +152,7 @@ async def take_activation_screen(out: Path) -> None:
 
 async def take_entra_screen(out: Path) -> None:
     """Entra role multiselect screen — roles loaded, a few selected."""
-    from fomo.app import PimApp
-
-    app = PimApp(demo_mode=True, dry_run=True)
+    app = _make_app()
     async with app.run_test(size=(COLS, ROWS)) as pilot:
         await _wait_for(pilot, lambda: _has_options(app, "#sub-list"))
 
