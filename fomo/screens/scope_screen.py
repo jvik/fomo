@@ -28,6 +28,7 @@ from rich.text import Text
 from fomo import azure, tiering
 
 MAX_SUBSCRIPTIONS = 3
+ENTRA_SORT_MODES = ("name", "tier", "expiry")
 
 
 class ScopeScreen(Screen):
@@ -39,6 +40,7 @@ class ScopeScreen(Screen):
         Binding("escape", "escape_key", "Back to filter", show=False, priority=True),
         Binding("a", "select_all", "All", show=True),
         Binding("n", "select_none", "None", show=True),
+        Binding("ctrl+s", "cycle_sort", "Sort", show=True, priority=True),
         Binding("i", "open_assignments", "Assignments", show=True),
         Binding("q", "quit_app", "Quit", show=True),
         Binding("up", "arrow_up", "↑", show=False),
@@ -60,6 +62,7 @@ class ScopeScreen(Screen):
         self._visible_ids: set[str] = set()
         self._selected_ids: set[str] = set()
         self._rebuilding = False
+        self._subs_desc = False
         # Entra tab state
         self._entra_loaded = False
         self._entra_loading = False
@@ -69,6 +72,7 @@ class ScopeScreen(Screen):
         self._visible_indices: set[int] = set()
         self._option_values: list[int | None] = []
         self._entra_rebuilding = False
+        self._entra_sort_mode = ENTRA_SORT_MODES[0]
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -191,7 +195,8 @@ class ScopeScreen(Screen):
         sl.clear_options()
         self._visible_ids = set()
         q = query.strip().lower()
-        for sub in self._all_subs:
+        ordered = sorted(self._all_subs, key=lambda s: s.name.casefold(), reverse=self._subs_desc)
+        for sub in ordered:
             display = f"{sub.name}  [dim]{sub.id}[/dim]"
             if q and q not in f"{sub.name} {sub.id}".lower():
                 continue
@@ -212,12 +217,13 @@ class ScopeScreen(Screen):
     def _update_sel_count(self) -> None:
         n = len(self._selected_ids)
         label = self.query_one("#sel-count", Label)
+        sort_tag = f"  ·  [dim]sort: {'Z→A' if self._subs_desc else 'A→Z'}[/dim]"
         if n == 0:
-            label.update("[dim]No subscriptions selected[/dim]")
+            label.update(f"[dim]No subscriptions selected[/dim]{sort_tag}")
         elif n > MAX_SUBSCRIPTIONS:
-            label.update(f"[bold]{n} subscriptions selected[/bold]  [bold red](warning: >{MAX_SUBSCRIPTIONS})[/bold red]")
+            label.update(f"[bold]{n} subscriptions selected[/bold]  [bold red](warning: >{MAX_SUBSCRIPTIONS})[/bold red]{sort_tag}")
         else:
-            label.update(f"[bold]{n}[/bold] subscription(s) selected")
+            label.update(f"[bold]{n}[/bold] subscription(s) selected{sort_tag}")
 
     @on(Input.Changed, "#filter")
     def on_filter_changed(self, event: Input.Changed) -> None:
@@ -314,6 +320,15 @@ class ScopeScreen(Screen):
     # Entra — filter helpers
     # ------------------------------------------------------------------
 
+    def _entra_sort_key(self, role: azure.EntraEligibleRole) -> tuple:
+        name = role.role_name.casefold()
+        if self._entra_sort_mode == "tier":
+            info = tiering.get_entra_tier(role.role_definition_id)
+            return (info["tier"] if info else 99, name)
+        if self._entra_sort_mode == "expiry":
+            return (role.expiry is None, role.expiry or "", name)
+        return (name,)
+
     def _rebuild_entra_list(self, query: str) -> None:
         sl = self.query_one("#entra-role-list", SelectionList)
         q = query.strip().lower()
@@ -321,7 +336,8 @@ class ScopeScreen(Screen):
         sl.clear_options()
         self._visible_indices = set()
         self._option_values = []
-        for idx, role in enumerate(self.all_roles):
+        ordered = sorted(enumerate(self.all_roles), key=lambda item: self._entra_sort_key(item[1]))
+        for idx, role in ordered:
             if q and q not in role.role_name.lower():
                 continue
             active_tag = " [bold green](active)[/bold green]" if role.is_active else ""
@@ -331,8 +347,8 @@ class ScopeScreen(Screen):
             self._visible_indices.add(idx)
             self._option_values.append(idx)
         self._entra_rebuilding = False
-        if self._visible_indices:
-            self._update_entra_detail(self.all_roles[min(self._visible_indices)])
+        if self._option_values:
+            self._update_entra_detail(self.all_roles[self._option_values[0]])
         else:
             self.query_one("#entra-detail", Label).update("[dim]No roles match filter.[/dim]")
 
@@ -368,10 +384,11 @@ class ScopeScreen(Screen):
     def _update_entra_status(self) -> None:
         n = len(self._selected)
         lbl = self.query_one("#entra-status", Label)
+        sort_tag = f"  ·  [dim]sort: {self._entra_sort_mode}[/dim]"
         if n == 0:
-            lbl.update("[dim]No roles selected[/dim]")
+            lbl.update(f"[dim]No roles selected[/dim]{sort_tag}")
         else:
-            lbl.update(f"[bold]{n}[/bold] role(s) selected")
+            lbl.update(f"[bold]{n}[/bold] role(s) selected{sort_tag}")
 
     def _update_entra_detail(self, role: azure.EntraEligibleRole) -> None:
         detail_lbl = self.query_one("#entra-detail", Label)
@@ -506,6 +523,22 @@ class ScopeScreen(Screen):
             focused = self.focused
             if focused is not None and hasattr(focused, "insert_text_at_cursor"):
                 focused.insert_text_at_cursor("x")
+
+    def action_cycle_sort(self) -> None:
+        """Azure tab: toggle A→Z / Z→A. Entra tab: cycle name → tier → expiry."""
+        if self._active_tab() != "tab-entra":
+            if not self._all_subs:
+                return
+            self._subs_desc = not self._subs_desc
+            self._rebuild_list(self.query_one("#filter", Input).value)
+            self._update_sel_count()
+            return
+        if not self._entra_loaded or not self.all_roles:
+            return
+        idx = ENTRA_SORT_MODES.index(self._entra_sort_mode)
+        self._entra_sort_mode = ENTRA_SORT_MODES[(idx + 1) % len(ENTRA_SORT_MODES)]
+        self._rebuild_entra_list(self.query_one("#entra-filter", Input).value)
+        self._update_entra_status()
 
     def action_open_assignments(self) -> None:
         from fomo.screens.assignments_screen import AssignmentsScreen

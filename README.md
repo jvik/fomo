@@ -134,3 +134,29 @@ The `-t`/`--time` flag accepts ISO 8601 durations (`PT1H`, `PT30M`) or shorthand
 
 All three forms respect `--dry-run` to simulate activation without API calls.
 
+## Development
+
+Clone the repo and install dependencies (including dev tools) into a local virtualenv:
+
+```sh
+git clone https://github.com/jvik/fomo.git
+cd fomo
+uv sync --group dev
+```
+
+Run from source:
+
+```sh
+uv run fomo              # full app — requires `az login` and PIM-eligible roles
+uv run fomo --dry-run    # real data, simulated activation (no write calls)
+uv run fomo --demo       # dummy data, no Azure account needed
+```
+
+Run tests:
+
+```sh
+uv run pytest
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and commit message guidelines.
+

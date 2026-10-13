@@ -12,6 +12,7 @@ from fomo.widgets import FomoSelectionList as SelectionList
 from textual.widgets._selection_list import Selection
 
 MAX_ROLES = 3
+SORT_MODES = ("name", "scope", "tier", "expiry")
 
 from fomo import azure, tiering
 
@@ -27,6 +28,7 @@ class RolesScreen(Screen):
         Binding("shift+tab", "focus_filter", "Prev box", show=True),
         Binding("slash", "focus_filter", "Filter", show=False),
         Binding("a", "select_all_visible", "All", show=True),
+        Binding("ctrl+s", "cycle_sort", "Sort", show=True, priority=True),
         Binding("j", "vim_down", "↓", show=False),
         Binding("k", "vim_up", "↑", show=False),
         Binding("g", "vim_top", "Top", show=False),
@@ -44,6 +46,7 @@ class RolesScreen(Screen):
         self._loaded_count = 0
         self._rebuilding = False
         self._auth_error_shown = False
+        self._sort_mode = SORT_MODES[0]
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -136,7 +139,6 @@ class RolesScreen(Screen):
                 seen.add(key)
                 unique.append(r)
         self.all_roles = unique
-        self.all_roles.sort(key=lambda r: (r.role_name, r.scope_display_name))
         self.query_one("#loading-area").display = False
         self.query_one("#split").display = True
         self._rebuild_list("")
@@ -146,6 +148,18 @@ class RolesScreen(Screen):
     # List management
     # ------------------------------------------------------------------
 
+    def _sort_key(self, role: azure.EligibleRole) -> tuple:
+        name = role.role_name.casefold()
+        scope = role.scope_display_name.casefold()
+        if self._sort_mode == "scope":
+            return (scope, name)
+        if self._sort_mode == "tier":
+            info = tiering.get_azure_tier(role.role_definition_id)
+            return (info["tier"] if info else 99, name, scope)
+        if self._sort_mode == "expiry":
+            return (role.expiry is None, role.expiry or "", name, scope)
+        return (name, scope)
+
     def _rebuild_list(self, query: str) -> None:
         sl = self.query_one("#role-list", SelectionList)
         self._rebuilding = True
@@ -154,8 +168,9 @@ class RolesScreen(Screen):
         self._option_values = []
         q = query.strip().lower()
 
-        sub_items = [(i, r) for i, r in enumerate(self.all_roles) if not r.is_global]
-        global_items = [(i, r) for i, r in enumerate(self.all_roles) if r.is_global]
+        ordered = sorted(enumerate(self.all_roles), key=lambda item: self._sort_key(item[1]))
+        sub_items = [(i, r) for i, r in ordered if not r.is_global]
+        global_items = [(i, r) for i, r in ordered if r.is_global]
 
         def _add(items: list) -> None:
             for i, role in items:
@@ -189,8 +204,9 @@ class RolesScreen(Screen):
 
         self._rebuilding = False
         self._update_status()
-        if self._visible_indices:
-            self._update_detail(self.all_roles[min(self._visible_indices)])
+        first = next((v for v in self._option_values if v is not None), None)
+        if first is not None:
+            self._update_detail(self.all_roles[first])
         else:
             self.query_one("#detail", Label).update("[dim]No roles match filter.[/dim]")
 
@@ -201,6 +217,7 @@ class RolesScreen(Screen):
         parts = [f"{n_sel} selected"]
         if n_vis < n_total:
             parts.append(f"{n_vis}/{n_total} shown")
+        parts.append(f"sort: {self._sort_mode}")
         self.query_one("#status", Label).update("  ·  ".join(parts))
 
     def _update_detail(self, role: azure.EligibleRole) -> None:
@@ -291,6 +308,13 @@ class RolesScreen(Screen):
             focused = self.focused
             if focused is not None and hasattr(focused, "insert_text_at_cursor"):
                 focused.insert_text_at_cursor("x")
+
+    def action_cycle_sort(self) -> None:
+        """Cycle the role list sort order: name → scope → tier → expiry."""
+        if not self.query_one("#split").display:
+            return
+        self._sort_mode = SORT_MODES[(SORT_MODES.index(self._sort_mode) + 1) % len(SORT_MODES)]
+        self._rebuild_list(self.query_one("#filter", Input).value)
 
     def action_focus_list(self) -> None:
         self.query_one("#role-list").focus()
