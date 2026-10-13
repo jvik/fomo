@@ -2,11 +2,16 @@
 
 ## Setup
 
+Tooling (Python, uv, just) is managed by [mise](https://mise.jdx.dev/) via [mise.toml](mise.toml):
+
 ```sh
 git clone https://github.com/jvik/fomo.git
 cd fomo
-uv sync --group dev
+mise install        # installs python, uv, just
+mise run setup      # uv sync --group dev
 ```
+
+Without mise, install Python ≥ 3.11 and uv yourself, then run `uv sync --group dev`.
 
 ## Running the app
 

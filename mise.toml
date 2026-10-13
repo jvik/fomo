@@ -1,0 +1,8 @@
+[tools]
+python = "3.12"
+uv = "latest"
+just = "latest"
+
+[tasks.setup]
+description = "Install dependencies (incl. dev group)"
+run = "uv sync --group dev"
