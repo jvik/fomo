@@ -19,13 +19,10 @@ from textual.widgets import (
     TabPane,
     Tabs,
 )
-
-from fomo.widgets import FomoSelectionList as SelectionList
 from textual.widgets.selection_list import Selection
 
-from rich.text import Text
-
 from fomo import azure, tiering
+from fomo.widgets import FomoSelectionList as SelectionList
 
 MAX_SUBSCRIPTIONS = 3
 ENTRA_SORT_MODES = ("name", "tier", "expiry")
@@ -70,7 +67,7 @@ class ScopeScreen(Screen):
         self.all_roles: list[azure.EntraEligibleRole] = []
         self._selected: set[int] = set()
         self._visible_indices: set[int] = set()
-        self._option_values: list[int | None] = []
+        self._option_values: list[int] = []
         self._entra_rebuilding = False
         self._entra_sort_mode = ENTRA_SORT_MODES[0]
 
@@ -221,7 +218,10 @@ class ScopeScreen(Screen):
         if n == 0:
             label.update(f"[dim]No subscriptions selected[/dim]{sort_tag}")
         elif n > MAX_SUBSCRIPTIONS:
-            label.update(f"[bold]{n} subscriptions selected[/bold]  [bold red](warning: >{MAX_SUBSCRIPTIONS})[/bold red]{sort_tag}")
+            label.update(
+                f"[bold]{n} subscriptions selected[/bold]  "
+                f"[bold red](warning: >{MAX_SUBSCRIPTIONS})[/bold red]{sort_tag}"
+            )
         else:
             label.update(f"[bold]{n}[/bold] subscription(s) selected{sort_tag}")
 
@@ -506,7 +506,6 @@ class ScopeScreen(Screen):
             if self.focused is self.query_one("#filter"):
                 self.action_focus_list()
                 return
-            sl = self.query_one("#sub-list", SelectionList)
             selected_ids: list[str] = list(self._selected_ids)
             if not selected_ids:
                 self.notify("Select at least one subscription.", severity="warning")
@@ -559,20 +558,20 @@ class ScopeScreen(Screen):
 
     def action_vim_down(self) -> None:
         w = self.focused
-        if hasattr(w, "action_cursor_down"):
+        if w is not None and hasattr(w,"action_cursor_down"):
             w.action_cursor_down()
 
     def action_vim_up(self) -> None:
         w = self.focused
-        if hasattr(w, "action_cursor_up"):
+        if w is not None and hasattr(w,"action_cursor_up"):
             w.action_cursor_up()
 
     def action_vim_top(self) -> None:
         w = self.focused
-        if hasattr(w, "scroll_home"):
+        if w is not None and hasattr(w,"scroll_home"):
             w.scroll_home(animate=False)
 
     def action_vim_bottom(self) -> None:
         w = self.focused
-        if hasattr(w, "scroll_end"):
+        if w is not None and hasattr(w,"scroll_end"):
             w.scroll_end(animate=False)

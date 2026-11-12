@@ -31,3 +31,20 @@ source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
 version-file = "fomo/_version.py"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ARG"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests request pytest fixtures for their side effects (patching, kill switch)
+# and fakes mirror the real signatures, so unused arguments are intentional.
+"tests/**" = ["ARG001", "ARG002", "ARG005"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+check_untyped_defs = false

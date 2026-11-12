@@ -18,8 +18,9 @@ import urllib.parse
 import urllib.request
 import uuid
 import webbrowser
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def _run_az(*args: str) -> Any:
     except FileNotFoundError:
         raise RuntimeError(
             "Azure CLI not found. Install it: https://aka.ms/installazurecli"
-        )
+        ) from None
     if result.returncode != 0:
         msg = result.stderr.strip()
         log.error(
@@ -106,7 +107,9 @@ class ManagementGroup:
 class EligibleRole:
     role_name: str
     role_definition_id: str
-    scope: str               # actual assignment scope: /subscriptions/{id} or /providers/Microsoft.Management/managementGroups/{id}
+    # actual assignment scope: /subscriptions/{id} or
+    # /providers/Microsoft.Management/managementGroups/{id}
+    scope: str
     scope_display_name: str  # human-readable scope name
     principal_id: str
     eligibility_schedule_id: str  # short GUID used in linkedRoleEligibilityScheduleId

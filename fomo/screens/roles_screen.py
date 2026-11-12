@@ -8,13 +8,13 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, Label, LoadingIndicator
-from fomo.widgets import FomoSelectionList as SelectionList
 from textual.widgets.selection_list import Selection
+
+from fomo import azure, tiering
+from fomo.widgets import FomoSelectionList as SelectionList
 
 MAX_ROLES = 3
 SORT_MODES = ("name", "scope", "tier", "expiry")
-
-from fomo import azure, tiering
 
 
 class RolesScreen(Screen):
@@ -93,7 +93,7 @@ class RolesScreen(Screen):
             self.app.call_from_thread(self._on_roles_error, sub_id, str(exc))
 
     def _on_roles_loaded(
-        self, sub_id: str, roles: list[azure.EligibleRole]
+        self, _sub_id: str, roles: list[azure.EligibleRole]
     ) -> None:
         self.all_roles.extend(roles)
         self._increment_loaded()
@@ -333,22 +333,22 @@ class RolesScreen(Screen):
 
     def action_vim_down(self) -> None:
         w = self.focused
-        if hasattr(w, "action_cursor_down"):
+        if w is not None and hasattr(w,"action_cursor_down"):
             w.action_cursor_down()
 
     def action_vim_up(self) -> None:
         w = self.focused
-        if hasattr(w, "action_cursor_up"):
+        if w is not None and hasattr(w,"action_cursor_up"):
             w.action_cursor_up()
 
     def action_vim_top(self) -> None:
         w = self.focused
-        if hasattr(w, "scroll_home"):
+        if w is not None and hasattr(w,"scroll_home"):
             w.scroll_home(animate=False)
 
     def action_vim_bottom(self) -> None:
         w = self.focused
-        if hasattr(w, "scroll_end"):
+        if w is not None and hasattr(w,"scroll_end"):
             w.scroll_end(animate=False)
 
     def action_proceed(self) -> None:
@@ -383,7 +383,8 @@ class RolesScreen(Screen):
 
         if len(selected_roles) > MAX_ROLES:
             self.notify(
-                f"You selected {len(selected_roles)} roles. Activating more than {MAX_ROLES} at once can be slow and error-prone. Proceed with care.",
+                f"You selected {len(selected_roles)} roles. Activating more than {MAX_ROLES} "
+                "at once can be slow and error-prone. Proceed with care.",
                 severity="warning",
                 timeout=8,
             )

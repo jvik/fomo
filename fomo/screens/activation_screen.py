@@ -150,7 +150,7 @@ class ActivationScreen(Screen):
                     dry_run=self.app.dry_run or getattr(self.app, "demo_mode", False),  # type: ignore[attr-defined]
                 )
                 status: str = result.get("properties", {}).get("status", "Submitted")
-                label = self._format_status(status)
+                label: str | Text = self._format_status(status)
             except Exception as exc:
                 full_error = str(exc)
                 log.error("activation failed for %s: %s", role.role_name, full_error)
@@ -184,7 +184,7 @@ class ActivationScreen(Screen):
     # UI update helpers (called from main thread via call_from_thread)
     # ------------------------------------------------------------------
 
-    def _set_status(self, table_id: str, row: int, text: str) -> None:
+    def _set_status(self, table_id: str, row: int, text: str | Text) -> None:
         table = self.query_one(f"#{table_id}", DataTable)
         table.update_cell_at(Coordinate(row, _COL_STATUS), text)
 

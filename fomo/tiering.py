@@ -91,7 +91,7 @@ def _fetch_json(url: str) -> list | None:
         req = urllib.request.Request(url, headers={"User-Agent": "fomo/tiering"})
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.debug("tiering: fetch failed for %s: %s", url, exc)
         return None
 

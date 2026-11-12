@@ -248,6 +248,7 @@ class PimApp(App):
             text=True,
         )
         self._color_scheme_proc = proc
+        assert proc.stdout is not None  # stdout=PIPE always provides a stream
         namespace = None
         key = None
         try:

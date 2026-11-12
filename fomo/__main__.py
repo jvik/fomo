@@ -171,7 +171,7 @@ def _cli_activate(
             status = result.get("properties", {}).get("status", "Submitted")
             print(f"✓ {status}")
         except Exception as exc:
-            print(f"✗")
+            print("✗")
             print(f"    {exc}", file=sys.stderr)
             errors += 1
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from rich.text import Text
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -20,8 +21,6 @@ from textual.widgets import (
     RichLog,
     Select,
 )
-
-from rich.text import Text
 
 from fomo import azure
 
@@ -122,7 +121,7 @@ class EntraActivationScreen(Screen):
                     dry_run=self.app.dry_run or getattr(self.app, "demo_mode", False),  # type: ignore[attr-defined]
                 )
                 status: str = result.get("status", "Submitted")
-                label = self._format_status(status)
+                label: str | Text = self._format_status(status)
             except Exception as exc:
                 full_error = str(exc)
                 log.error("Entra activation failed for %s: %s", role.role_name, full_error)
@@ -137,7 +136,7 @@ class EntraActivationScreen(Screen):
     # UI update helpers
     # ------------------------------------------------------------------
 
-    def _set_status(self, row: int, text: str) -> None:
+    def _set_status(self, row: int, text: str | Text) -> None:
         self.query_one("#roles-table", DataTable).update_cell_at(Coordinate(row, 2), text)
 
     def _append_error(self, role_name: str, message: str) -> None:

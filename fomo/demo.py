@@ -5,8 +5,8 @@ from __future__ import annotations
 from fomo.azure import (
     ActiveAssignment,
     ActiveEntraAssignment,
-    EntraEligibleRole,
     EligibleRole,
+    EntraEligibleRole,
     Subscription,
 )
 

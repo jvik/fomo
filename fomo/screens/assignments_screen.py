@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import threading
 
 from rich.text import Text
@@ -11,10 +10,9 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Label, LoadingIndicator, TabbedContent, TabPane
+from textual.widgets.data_table import ColumnKey
 
 from fomo import azure
-
-log = logging.getLogger(__name__)
 
 _COL_NAMES = ("Role", "Scope", "Expiry", "Type")
 
@@ -38,7 +36,7 @@ class AssignmentsScreen(Screen):
     def __init__(self) -> None:
         super().__init__()
         self._stop_event = threading.Event()
-        self._sort_col: dict[str, object] = {}   # table id → last sorted column key
+        self._sort_col: dict[str, ColumnKey | str] = {}   # table id → last sorted column key
         self._sort_asc: dict[str, bool] = {}     # table id → ascending?
 
     def compose(self) -> ComposeResult:
@@ -191,7 +189,7 @@ class AssignmentsScreen(Screen):
     # Column-header sorting (mouse) and key-based sorting
     # ------------------------------------------------------------------
 
-    def _sort_table(self, table: DataTable, col: object) -> None:
+    def _sort_table(self, table: DataTable, col: ColumnKey | str) -> None:
         tid = table.id or ""
         if self._sort_col.get(tid) == col:
             self._sort_asc[tid] = not self._sort_asc.get(tid, True)
@@ -206,7 +204,7 @@ class AssignmentsScreen(Screen):
         sort_col = self._sort_col.get(tid)
         asc = self._sort_asc.get(tid, True)
         arrow = " ↑" if asc else " ↓"
-        for key, name in zip(table.columns, _COL_NAMES):
+        for key, name in zip(table.columns, _COL_NAMES, strict=False):
             label = Text(name + arrow) if key == sort_col else Text(name)
             table.columns[key].label = label
         table.refresh()
@@ -228,20 +226,20 @@ class AssignmentsScreen(Screen):
 
     def action_vim_down(self) -> None:
         w = self.focused
-        if hasattr(w, "action_cursor_down"):
+        if w is not None and hasattr(w,"action_cursor_down"):
             w.action_cursor_down()
 
     def action_vim_up(self) -> None:
         w = self.focused
-        if hasattr(w, "action_cursor_up"):
+        if w is not None and hasattr(w,"action_cursor_up"):
             w.action_cursor_up()
 
     def action_vim_top(self) -> None:
         w = self.focused
-        if hasattr(w, "scroll_home"):
+        if w is not None and hasattr(w,"scroll_home"):
             w.scroll_home(animate=False)
 
     def action_vim_bottom(self) -> None:
         w = self.focused
-        if hasattr(w, "scroll_end"):
+        if w is not None and hasattr(w,"scroll_end"):
             w.scroll_end(animate=False)

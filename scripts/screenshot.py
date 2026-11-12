@@ -34,7 +34,7 @@ def _make_app():
     from fomo import app as app_module
 
     app_module._system_is_dark = lambda: True
-    app_module.PimApp._watch_color_scheme = lambda self: None
+    app_module.PimApp._watch_color_scheme = lambda _self: None
     return app_module.PimApp(demo_mode=True, dry_run=True)
 
 
