@@ -86,7 +86,7 @@ async def take_roles_screen(out: Path) -> None:
         sl = _sl(app, "#sub-list")
         for i in range(sl.option_count):
             sl.select(sl.get_option_at_index(i))
-        sl.focus()          # focus starts on the tab bar, where enter only moves to the filter
+        sl.focus()  # focus starts on the tab bar, where enter only moves to the filter
         await pilot.pause(0.05)
         await pilot.press("enter")
 
@@ -124,16 +124,14 @@ async def take_activation_screen(out: Path) -> None:
         rl = _sl(app, "#role-list")
         for i in range(min(3, rl.option_count)):
             rl.select(rl.get_option_at_index(i))
-        rl.focus()          # must focus the list, not the filter, for proceed to work
+        rl.focus()  # must focus the list, not the filter, for proceed to work
         await pilot.pause(0.05)
         await pilot.press("enter")
 
         await _wait_for(pilot, lambda: bool(app.screen.query("#justification")))
         await pilot.pause(0.1)
 
-        app.screen.query_one("#justification", Input).value = (
-            "Break-glass access — production incident"
-        )
+        app.screen.query_one("#justification", Input).value = "Break-glass access — production incident"
 
         await pilot.pause(0.1)
 
@@ -147,7 +145,6 @@ async def take_activation_screen(out: Path) -> None:
         await pilot.pause(0.15)
         app.save_screenshot(str(out / "03-activation-done.svg"))
         print(f"  ✓  {out / '03-activation-done.svg'}")
-
 
 
 async def take_entra_screen(out: Path) -> None:

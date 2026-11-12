@@ -39,13 +39,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "-r", "--reason",
+        "-r",
+        "--reason",
         metavar="TEXT",
         default=None,
         help="Justification for activation (enables non-interactive mode).",
     )
     parser.add_argument(
-        "-t", "--time",
+        "-t",
+        "--time",
         metavar="DURATION",
         dest="duration",
         default="PT1H",
@@ -112,10 +114,7 @@ def _cli_activate(
         sys.exit(1)
 
     sub_lower = subscription.lower()
-    filtered = [
-        s for s in subs
-        if sub_lower in s.name.lower() or sub_lower == s.id.lower()
-    ]
+    filtered = [s for s in subs if sub_lower in s.name.lower() or sub_lower == s.id.lower()]
     if not filtered:
         print(f"Error: No subscription matching '{subscription}' found.", file=sys.stderr)
         print("Available subscriptions:", file=sys.stderr)
@@ -203,10 +202,7 @@ def _cli_activate_mg(
         sys.exit(1)
 
     mg_lower = management_group.lower()
-    filtered = [
-        mg for mg in mgs
-        if mg_lower in mg.name.lower() or mg_lower == mg.id.lower()
-    ]
+    filtered = [mg for mg in mgs if mg_lower in mg.name.lower() or mg_lower == mg.id.lower()]
     if not filtered:
         print(f"Error: No management group matching '{management_group}' found.", file=sys.stderr)
         print("Available management groups:", file=sys.stderr)
@@ -367,9 +363,7 @@ def main() -> None:
     if args.reason is not None:
         if args.entra:
             if len(positional) != 1:
-                parser.error(
-                    "Provide exactly one positional argument (ROLE) when using --entra --reason/-r"
-                )
+                parser.error("Provide exactly one positional argument (ROLE) when using --entra --reason/-r")
             _cli_activate_entra(
                 role_name=positional[0],
                 justification=args.reason,
@@ -379,9 +373,7 @@ def main() -> None:
             return
         if args.mg:
             if len(positional) != 1:
-                parser.error(
-                    "Provide exactly one positional argument (ROLE) when using --mg --reason/-r"
-                )
+                parser.error("Provide exactly one positional argument (ROLE) when using --mg --reason/-r")
             _cli_activate_mg(
                 management_group=args.mg,
                 role_name=positional[0],
@@ -394,9 +386,7 @@ def main() -> None:
             subscription = positional[0]
             role_name = positional[1]
         else:
-            parser.error(
-                "Provide SUBSCRIPTION ROLE as positional arguments when using --reason/-r"
-            )
+            parser.error("Provide SUBSCRIPTION ROLE as positional arguments when using --reason/-r")
         _cli_activate(
             subscription=subscription,
             role_name=role_name,
@@ -407,9 +397,7 @@ def main() -> None:
         return
 
     if positional:
-        parser.error(
-            "Positional arguments require --reason/-r for non-interactive activation"
-        )
+        parser.error("Positional arguments require --reason/-r for non-interactive activation")
 
     from fomo.app import PimApp
 

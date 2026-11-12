@@ -19,14 +19,8 @@ log = logging.getLogger(__name__)
 _CACHE_DIR = os.path.expanduser("~/.cache/fomo")
 _CACHE_TTL = 7 * 24 * 3600  # 1 week
 
-_AZURE_URL = (
-    "https://raw.githubusercontent.com/emiliensocchi/azure-tiering/main"
-    "/Azure%20roles/tiered-azure-roles.json"
-)
-_ENTRA_URL = (
-    "https://raw.githubusercontent.com/emiliensocchi/azure-tiering/main"
-    "/Entra%20roles/tiered-entra-roles.json"
-)
+_AZURE_URL = "https://raw.githubusercontent.com/emiliensocchi/azure-tiering/main/Azure%20roles/tiered-azure-roles.json"
+_ENTRA_URL = "https://raw.githubusercontent.com/emiliensocchi/azure-tiering/main/Entra%20roles/tiered-entra-roles.json"
 
 # Tier display metadata
 TIER_BADGE: dict[int, str] = {0: "🔴", 1: "🟠", 2: "🟡", 3: "🟢"}
@@ -59,6 +53,7 @@ _entra_index: dict[str, TierInfo] = {}
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _cache_path(kind: str) -> str:
     return os.path.join(_CACHE_DIR, f"tiering_{kind}.json")
@@ -107,10 +102,7 @@ def _build_index(data: list) -> dict[str, TierInfo]:
         except (KeyError, ValueError):
             continue
         attack_path = (
-            item.get("shortestPath")
-            or item.get("worstCaseScenario")
-            or item.get("providesFullAccessTo")
-            or ""
+            item.get("shortestPath") or item.get("worstCaseScenario") or item.get("providesFullAccessTo") or ""
         )
         index[guid] = TierInfo(
             tier=tier,
@@ -123,6 +115,7 @@ def _build_index(data: list) -> dict[str, TierInfo]:
 # ---------------------------------------------------------------------------
 # Public API — called from background worker threads
 # ---------------------------------------------------------------------------
+
 
 def load_azure() -> None:
     """Load (or refresh) the Azure roles tiering index.

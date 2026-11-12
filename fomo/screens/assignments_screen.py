@@ -36,8 +36,8 @@ class AssignmentsScreen(Screen):
     def __init__(self) -> None:
         super().__init__()
         self._stop_event = threading.Event()
-        self._sort_col: dict[str, ColumnKey | str] = {}   # table id → last sorted column key
-        self._sort_asc: dict[str, bool] = {}     # table id → ascending?
+        self._sort_col: dict[str, ColumnKey | str] = {}  # table id → last sorted column key
+        self._sort_asc: dict[str, bool] = {}  # table id → ascending?
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -75,6 +75,7 @@ class AssignmentsScreen(Screen):
     def _load_azure(self) -> None:
         if self.app.demo_mode:  # type: ignore[attr-defined]
             from fomo import demo as demo_data
+
             self.app.call_from_thread(self._on_azure_done, demo_data.list_active_arm_assignments())
             return
         try:
@@ -121,6 +122,7 @@ class AssignmentsScreen(Screen):
     def _load_entra(self) -> None:
         if self.app.demo_mode:  # type: ignore[attr-defined]
             from fomo import demo as demo_data
+
             self.app.call_from_thread(self._on_entra_done, demo_data.list_active_entra_assignments())
             return
 
@@ -172,14 +174,11 @@ class AssignmentsScreen(Screen):
             )
         elif azure.is_scope_error(msg):
             body = (
-                "[bold red]Missing Graph permissions.[/bold red]\n\n"
-                "Re-run [bold]fomo --entra[/bold] to re-authorise."
+                "[bold red]Missing Graph permissions.[/bold red]\n\nRe-run [bold]fomo --entra[/bold] to re-authorise."
             )
         else:
             wrapped = "\n".join(
-                line if len(line) <= 80 else "\n".join(
-                    line[i : i + 80] for i in range(0, len(line), 80)
-                )
+                line if len(line) <= 80 else "\n".join(line[i : i + 80] for i in range(0, len(line), 80))
                 for line in msg.splitlines()
             )
             body = f"[bold red]Error:[/bold red]\n\n{wrapped}"
@@ -226,20 +225,20 @@ class AssignmentsScreen(Screen):
 
     def action_vim_down(self) -> None:
         w = self.focused
-        if w is not None and hasattr(w,"action_cursor_down"):
+        if w is not None and hasattr(w, "action_cursor_down"):
             w.action_cursor_down()
 
     def action_vim_up(self) -> None:
         w = self.focused
-        if w is not None and hasattr(w,"action_cursor_up"):
+        if w is not None and hasattr(w, "action_cursor_up"):
             w.action_cursor_up()
 
     def action_vim_top(self) -> None:
         w = self.focused
-        if w is not None and hasattr(w,"scroll_home"):
+        if w is not None and hasattr(w, "scroll_home"):
             w.scroll_home(animate=False)
 
     def action_vim_bottom(self) -> None:
         w = self.focused
-        if w is not None and hasattr(w,"scroll_end"):
+        if w is not None and hasattr(w, "scroll_end"):
             w.scroll_end(animate=False)

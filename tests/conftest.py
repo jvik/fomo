@@ -317,9 +317,7 @@ CliResult = tuple[int, list[str], list[str]]
 
 
 @pytest.fixture
-def run_cli(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> Callable[[list[str]], CliResult]:
+def run_cli(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> Callable[[list[str]], CliResult]:
     """Run ``fomo.__main__.main()`` with *argv*; return (code, stdout, stderr) lines."""
     from fomo.__main__ import main
 

@@ -80,9 +80,7 @@ async def _switch_to_entra(pilot: Pilot) -> FomoSelectionList:
     await pilot.pause()
     assert isinstance(app.focused, Tabs)
     await pilot.press("l")
-    await wait_for(
-        pilot, lambda: app.screen.query_one("#scope-tabs", TabbedContent).active == "tab-entra"
-    )
+    await wait_for(pilot, lambda: app.screen.query_one("#scope-tabs", TabbedContent).active == "tab-entra")
     await wait_for(pilot, lambda: _list(app, "#entra-role-list").option_count == 5)
     return _list(app, "#entra-role-list")
 
@@ -164,10 +162,7 @@ def test_activation_screen_dry_run(make_app, fake_azure) -> None:
         app = make_app()
         async with app.run_test(size=SIZE) as pilot:
             roles = await _open_roles(pilot)
-            idx = next(
-                i for i in range(roles.option_count)
-                if not roles.get_option_at_index(i).disabled
-            )
+            idx = next(i for i in range(roles.option_count) if not roles.get_option_at_index(i).disabled)
             roles.focus()
             roles.highlighted = idx
             await pilot.pause()
@@ -229,8 +224,10 @@ def test_assignments_screen_populates_both_tables(make_app) -> None:
             await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
             await wait_for(
                 pilot,
-                lambda: app.screen.query_one("#azure-table", DataTable).row_count == 4
-                and app.screen.query_one("#entra-table", DataTable).row_count == 2,
+                lambda: (
+                    app.screen.query_one("#azure-table", DataTable).row_count == 4
+                    and app.screen.query_one("#entra-table", DataTable).row_count == 2
+                ),
             )
             await pilot.press("escape")
             await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))

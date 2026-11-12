@@ -40,7 +40,7 @@ class RolesScreen(Screen):
         super().__init__()
         self._sub_ids = subscription_ids
         self.all_roles: list[azure.EligibleRole] = []
-        self._selected: set[int] = set()       # indices into all_roles
+        self._selected: set[int] = set()  # indices into all_roles
         self._visible_indices: set[int] = set()
         self._option_values: list[int | None] = []  # option_index → all_roles index (None for separators)
         self._loaded_count = 0
@@ -82,6 +82,7 @@ class RolesScreen(Screen):
         try:
             if getattr(self.app, "demo_mode", False):
                 from fomo import demo as demo_data
+
                 roles = demo_data.list_eligible_roles(sub_id)
             else:
                 roles = azure.list_eligible_roles(sub_id)
@@ -92,9 +93,7 @@ class RolesScreen(Screen):
         except Exception as exc:
             self.app.call_from_thread(self._on_roles_error, sub_id, str(exc))
 
-    def _on_roles_loaded(
-        self, _sub_id: str, roles: list[azure.EligibleRole]
-    ) -> None:
+    def _on_roles_loaded(self, _sub_id: str, roles: list[azure.EligibleRole]) -> None:
         self.all_roles.extend(roles)
         self._increment_loaded()
 
@@ -103,6 +102,7 @@ class RolesScreen(Screen):
             if not self._auth_error_shown:
                 self._auth_error_shown = True
                 from fomo.app import AuthErrorModal
+
                 self.app.push_screen(AuthErrorModal())
         else:
             self.notify(f"[{sub_id[:8]}…] {msg}", severity="error", timeout=8)
@@ -110,9 +110,7 @@ class RolesScreen(Screen):
 
     def _increment_loaded(self) -> None:
         self._loaded_count += 1
-        self.query_one("#loading-label", Label).update(
-            f"Loading roles… {self._loaded_count}/{len(self._sub_ids)}"
-        )
+        self.query_one("#loading-label", Label).update(f"Loading roles… {self._loaded_count}/{len(self._sub_ids)}")
         if self._loaded_count < len(self._sub_ids):
             return
         # All subscriptions have responded
@@ -190,15 +188,16 @@ class RolesScreen(Screen):
         _add(sub_items)
 
         visible_globals = [
-            (i, r) for i, r in global_items
-            if not q or q in f"{r.role_name}  —  {r.scope_display_name}".lower()
+            (i, r) for i, r in global_items if not q or q in f"{r.role_name}  —  {r.scope_display_name}".lower()
         ]
         if visible_globals:
-            sl.add_option(Selection(
-                "⚠ Global assignments (management group scope)",
-                -1,
-                disabled=True,
-            ))
+            sl.add_option(
+                Selection(
+                    "⚠ Global assignments (management group scope)",
+                    -1,
+                    disabled=True,
+                )
+            )
             self._option_values.append(None)
             _add(global_items)
 
@@ -333,22 +332,22 @@ class RolesScreen(Screen):
 
     def action_vim_down(self) -> None:
         w = self.focused
-        if w is not None and hasattr(w,"action_cursor_down"):
+        if w is not None and hasattr(w, "action_cursor_down"):
             w.action_cursor_down()
 
     def action_vim_up(self) -> None:
         w = self.focused
-        if w is not None and hasattr(w,"action_cursor_up"):
+        if w is not None and hasattr(w, "action_cursor_up"):
             w.action_cursor_up()
 
     def action_vim_top(self) -> None:
         w = self.focused
-        if w is not None and hasattr(w,"scroll_home"):
+        if w is not None and hasattr(w, "scroll_home"):
             w.scroll_home(animate=False)
 
     def action_vim_bottom(self) -> None:
         w = self.focused
-        if w is not None and hasattr(w,"scroll_end"):
+        if w is not None and hasattr(w, "scroll_end"):
             w.scroll_end(animate=False)
 
     def action_proceed(self) -> None:
@@ -369,9 +368,9 @@ class RolesScreen(Screen):
 
         # Blast-radius warning for high-risk (Tier 0 / Tier 1) roles
         high_risk = [
-            t for r in selected_roles
-            if (t := tiering.get_azure_tier(r.role_definition_id)) is not None
-            and t["tier"] <= 1
+            t
+            for r in selected_roles
+            if (t := tiering.get_azure_tier(r.role_definition_id)) is not None and t["tier"] <= 1
         ]
         if high_risk:
             summary = tiering.high_risk_summary(high_risk)
@@ -389,4 +388,5 @@ class RolesScreen(Screen):
                 timeout=8,
             )
         from fomo.screens.activation_screen import ActivationScreen
+
         self.app.push_screen(ActivationScreen(selected_roles))

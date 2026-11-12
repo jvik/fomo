@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _run_az(*args: str) -> Any:
     """Run an `az` CLI command and return parsed JSON output.
 
@@ -42,9 +43,7 @@ def _run_az(*args: str) -> Any:
             text=True,
         )
     except FileNotFoundError:
-        raise RuntimeError(
-            "Azure CLI not found. Install it: https://aka.ms/installazurecli"
-        ) from None
+        raise RuntimeError("Azure CLI not found. Install it: https://aka.ms/installazurecli") from None
     if result.returncode != 0:
         msg = result.stderr.strip()
         log.error(
@@ -91,6 +90,7 @@ def is_scope_error(msg: str) -> bool:
 # Data models
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Subscription:
     id: str
@@ -99,7 +99,7 @@ class Subscription:
 
 @dataclass
 class ManagementGroup:
-    id: str    # short name / tenantId-based ID used in the ARM path
+    id: str  # short name / tenantId-based ID used in the ARM path
     name: str  # displayName
 
 
@@ -113,8 +113,8 @@ class EligibleRole:
     scope_display_name: str  # human-readable scope name
     principal_id: str
     eligibility_schedule_id: str  # short GUID used in linkedRoleEligibilityScheduleId
-    expiry: str | None            # ISO 8601 datetime string or None
-    is_active: bool = False       # True if already PIM-activated
+    expiry: str | None  # ISO 8601 datetime string or None
+    is_active: bool = False  # True if already PIM-activated
 
     @property
     def is_global(self) -> bool:
@@ -136,29 +136,29 @@ class EntraEligibleRole:
 @dataclass
 class ActiveAssignment:
     """An active ARM role assignment (permanently assigned or PIM-activated)."""
+
     role_name: str
     scope: str
     scope_display_name: str
-    expiry: str | None            # ISO 8601 datetime or None for permanent
-    assignment_type: str          # "Assigned" (direct/inherited) or "Activated" (PIM)
+    expiry: str | None  # ISO 8601 datetime or None for permanent
+    assignment_type: str  # "Assigned" (direct/inherited) or "Activated" (PIM)
 
 
 @dataclass
 class ActiveEntraAssignment:
     """An active Entra role assignment (permanently assigned or PIM-activated)."""
+
     role_name: str
-    directory_scope_id: str       # "/" = tenant-wide
-    expiry: str | None            # ISO 8601 datetime or None for permanent
-    assignment_type: str          # "Assigned" (direct) or "Activated" (PIM)
+    directory_scope_id: str  # "/" = tenant-wide
+    expiry: str | None  # ISO 8601 datetime or None for permanent
+    assignment_type: str  # "Assigned" (direct) or "Activated" (PIM)
 
 
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
 
-_DURATION_RE = re.compile(
-    r"^P(?:\d+Y)?(?:\d+M)?(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$"
-)
+_DURATION_RE = re.compile(r"^P(?:\d+Y)?(?:\d+M)?(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$")
 
 
 def validate_duration(s: str) -> bool:
@@ -184,9 +184,7 @@ def parse_duration(s: str) -> str:
         if m.group(2):
             result += f"{m.group(2)}M"
         return result
-    raise ValueError(
-        f"Invalid duration {s!r}. Use e.g. '30m', '1h', '1h30m', or ISO 8601 like 'PT1H'."
-    )
+    raise ValueError(f"Invalid duration {s!r}. Use e.g. '30m', '1h', '1h30m', or ISO 8601 like 'PT1H'.")
 
 
 def format_expiry(expiry: str | None) -> str:
@@ -199,6 +197,7 @@ def format_expiry(expiry: str | None) -> str:
 # ---------------------------------------------------------------------------
 # Azure API calls
 # ---------------------------------------------------------------------------
+
 
 def get_current_user() -> str:
     """Return the object ID of the currently signed-in user."""
@@ -266,9 +265,7 @@ def list_eligible_roles_mg(mg_id: str) -> list[EligibleRole]:
                 role_name=expanded.get("roleDefinition", {}).get("displayName", "Unknown"),
                 role_definition_id=role_def_id,
                 scope=actual_scope,
-                scope_display_name=(
-                    expanded.get("scope", {}).get("displayName") or mg_id
-                ),
+                scope_display_name=(expanded.get("scope", {}).get("displayName") or mg_id),
                 principal_id=user_id,
                 eligibility_schedule_id=sched_id,
                 expiry=props.get("endDateTime"),
@@ -338,9 +335,7 @@ def list_eligible_roles(subscription_id: str) -> list[EligibleRole]:
                 role_name=expanded.get("roleDefinition", {}).get("displayName", "Unknown"),
                 role_definition_id=role_def_id,
                 scope=actual_scope,
-                scope_display_name=(
-                    expanded.get("scope", {}).get("displayName") or subscription_id
-                ),
+                scope_display_name=(expanded.get("scope", {}).get("displayName") or subscription_id),
                 principal_id=user_id,
                 eligibility_schedule_id=sched_id,
                 expiry=props.get("endDateTime"),
@@ -390,12 +385,17 @@ def activate_role(
         f"/providers/Microsoft.Authorization"
         f"/roleAssignmentScheduleRequests/{request_id}?api-version=2020-10-01"
     )
-    log.debug(
-        "activating role %s on %s (request %s)", role.role_name, role.scope, request_id
-    )
+    log.debug("activating role %s on %s (request %s)", role.role_name, role.scope, request_id)
     response = _run_az(
-        "rest", "--method", "PUT", "--url", url, "--body", body,
-        "--headers", "Content-Type=application/json",
+        "rest",
+        "--method",
+        "PUT",
+        "--url",
+        url,
+        "--body",
+        body,
+        "--headers",
+        "Content-Type=application/json",
     )
     log.debug(
         "activation response for %s: status=%s",
@@ -439,11 +439,7 @@ def _load_token_cache() -> dict | None:
 def _save_token_cache(token_data: dict, tenant_id: str) -> None:
     """Persist access + refresh tokens to disk with 0o600 permissions."""
     os.makedirs(os.path.dirname(_TOKEN_CACHE_PATH), exist_ok=True)
-    payload = {
-        k: token_data[k]
-        for k in ("access_token", "refresh_token", "expires_in")
-        if k in token_data
-    }
+    payload = {k: token_data[k] for k in ("access_token", "refresh_token", "expires_in") if k in token_data}
     payload["tenant_id"] = tenant_id
     payload["cached_at"] = time.time()
     with open(_TOKEN_CACHE_PATH, "w") as f:
@@ -457,12 +453,14 @@ def _token_endpoint(tenant_id: str) -> str:
 
 def _try_refresh_token(tenant_id: str, refresh_token: str) -> dict | None:
     """Attempt a silent token refresh. Returns the token dict or None on failure."""
-    data = urllib.parse.urlencode({
-        "grant_type": "refresh_token",
-        "client_id": _GRAPH_CLIENT_ID,
-        "refresh_token": refresh_token,
-        "scope": _GRAPH_SCOPES,
-    }).encode()
+    data = urllib.parse.urlencode(
+        {
+            "grant_type": "refresh_token",
+            "client_id": _GRAPH_CLIENT_ID,
+            "refresh_token": refresh_token,
+            "scope": _GRAPH_SCOPES,
+        }
+    ).encode()
     req = urllib.request.Request(_token_endpoint(tenant_id), data=data, method="POST")
     try:
         with urllib.request.urlopen(req) as resp:
@@ -484,10 +482,12 @@ def _device_code_flow(
     """
     dc_req = urllib.request.Request(
         f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/devicecode",
-        data=urllib.parse.urlencode({
-            "client_id": _GRAPH_CLIENT_ID,
-            "scope": _GRAPH_SCOPES,
-        }).encode(),
+        data=urllib.parse.urlencode(
+            {
+                "client_id": _GRAPH_CLIENT_ID,
+                "scope": _GRAPH_SCOPES,
+            }
+        ).encode(),
         method="POST",
     )
     with urllib.request.urlopen(dc_req) as resp:
@@ -516,11 +516,13 @@ def _device_code_flow(
             time.sleep(interval)
         poll_req = urllib.request.Request(
             token_endpoint,
-            data=urllib.parse.urlencode({
-                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-                "client_id": _GRAPH_CLIENT_ID,
-                "device_code": dc["device_code"],
-            }).encode(),
+            data=urllib.parse.urlencode(
+                {
+                    "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                    "client_id": _GRAPH_CLIENT_ID,
+                    "device_code": dc["device_code"],
+                }
+            ).encode(),
             method="POST",
         )
         try:
@@ -540,8 +542,7 @@ def _device_code_flow(
                 raise RuntimeError("Device code expired — please try again.") from None
             else:
                 raise RuntimeError(
-                    f"Graph authentication failed: {error}: "
-                    f"{body.get('error_description', '')}"
+                    f"Graph authentication failed: {error}: {body.get('error_description', '')}"
                 ) from None
 
     raise RuntimeError("Device code authentication timed out — please try again.")
@@ -616,10 +617,7 @@ def _list_active_entra_role_def_ids(principal_id: str) -> frozenset[str]:
         f"principalId eq '{principal_id}' and assignmentType eq 'Activated'",
         safe="'()",
     )
-    url = (
-        f"{_GRAPH}/v1.0/roleManagement/directory/roleAssignmentScheduleInstances"
-        f"?$filter={filter_val}"
-    )
+    url = f"{_GRAPH}/v1.0/roleManagement/directory/roleAssignmentScheduleInstances?$filter={filter_val}"
     try:
         data = _run_graph("GET", url)
     except RuntimeError:
@@ -652,9 +650,7 @@ def list_entra_eligible_roles(
                 role_name=role_def.get("displayName", "Unknown"),
                 role_definition_id=role_def_id,
                 principal_id=user_id,
-                eligibility_schedule_id=item.get(
-                    "roleEligibilityScheduleId", item.get("id", str(uuid.uuid4()))
-                ),
+                eligibility_schedule_id=item.get("roleEligibilityScheduleId", item.get("id", str(uuid.uuid4()))),
                 expiry=item.get("endDateTime"),
                 directory_scope_id=item.get("directoryScopeId", "/"),
                 is_active=role_def_id in active_def_ids,
@@ -705,6 +701,7 @@ def activate_entra_role(
 # Active assignment listings (for the Assignments screen)
 # ---------------------------------------------------------------------------
 
+
 def list_active_arm_assignments() -> list[ActiveAssignment]:
     """List all active ARM role assignments for the current user across all scopes.
 
@@ -727,9 +724,7 @@ def list_active_arm_assignments() -> list[ActiveAssignment]:
             ActiveAssignment(
                 role_name=expanded.get("roleDefinition", {}).get("displayName", "Unknown"),
                 scope=scope_id,
-                scope_display_name=(
-                    expanded.get("scope", {}).get("displayName") or scope_id
-                ),
+                scope_display_name=(expanded.get("scope", {}).get("displayName") or scope_id),
                 expiry=props.get("endDateTime"),
                 assignment_type=props.get("assignmentType", "Assigned"),
             )
@@ -766,4 +761,3 @@ def list_active_entra_assignments(
             )
         )
     return assignments
-

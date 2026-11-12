@@ -147,6 +147,7 @@ class ScopeScreen(Screen):
         try:
             if getattr(self.app, "demo_mode", False):
                 from fomo import demo as demo_data
+
                 subs = demo_data.list_subscriptions()
             else:
                 subs = azure.list_subscriptions()
@@ -156,9 +157,7 @@ class ScopeScreen(Screen):
 
     def _show_subs(self, subs: list[azure.Subscription]) -> None:
         self.query_one("#spinner").display = False
-        self.query_one("#loading-label", Label).update(
-            f"Select subscriptions  ({len(subs)} found)"
-        )
+        self.query_one("#loading-label", Label).update(f"Select subscriptions  ({len(subs)} found)")
         self._all_subs = subs
         self.query_one("#filter").display = True
         self._rebuild_list("")
@@ -255,6 +254,7 @@ class ScopeScreen(Screen):
     def _load_entra_roles(self) -> None:
         if getattr(self.app, "demo_mode", False):
             from fomo import demo as demo_data
+
             roles = demo_data.list_entra_eligible_roles()
             if not tiering._entra_index:
                 tiering.load_entra()
@@ -263,6 +263,7 @@ class ScopeScreen(Screen):
 
         def _on_device_code(message: str) -> None:
             url, _, code = message.partition("\n")
+
             def _update() -> None:
                 self.query_one("#entra-loading-label", Label).update(
                     "[bold]Sign in to Microsoft Graph[/bold]\n\n"
@@ -270,6 +271,7 @@ class ScopeScreen(Screen):
                     f"[dim]2.[/dim] Enter code:  [bold]{code}[/bold]\n\n"
                     "[dim]Waiting for authentication…[/dim]"
                 )
+
             self.app.call_from_thread(_update)
 
         try:
@@ -308,9 +310,7 @@ class ScopeScreen(Screen):
             )
         else:
             wrapped = "\n".join(
-                line if len(line) <= 80 else "\n".join(
-                    msg[i:i+80] for i in range(0, len(line), 80)
-                )
+                line if len(line) <= 80 else "\n".join(msg[i : i + 80] for i in range(0, len(line), 80))
                 for line in msg.splitlines()
             )
             body = f"[bold red]Error:[/bold red]\n\n{wrapped}"
@@ -489,9 +489,9 @@ class ScopeScreen(Screen):
                 self.notify("Select at least one role.", severity="warning")
                 return
             high_risk = [
-                t for r in selected_roles
-                if (t := tiering.get_entra_tier(r.role_definition_id)) is not None
-                and t["tier"] <= 1
+                t
+                for r in selected_roles
+                if (t := tiering.get_entra_tier(r.role_definition_id)) is not None and t["tier"] <= 1
             ]
             if high_risk:
                 summary = tiering.high_risk_summary(high_risk)
@@ -501,6 +501,7 @@ class ScopeScreen(Screen):
                     timeout=15,
                 )
             from fomo.screens.entra_screen import EntraActivationScreen
+
             self.app.push_screen(EntraActivationScreen(selected_roles))
         else:
             if self.focused is self.query_one("#filter"):
@@ -511,6 +512,7 @@ class ScopeScreen(Screen):
                 self.notify("Select at least one subscription.", severity="warning")
                 return
             from fomo.screens.roles_screen import RolesScreen
+
             self.app.push_screen(RolesScreen(selected_ids))
 
     def action_select_focused(self) -> None:
@@ -541,6 +543,7 @@ class ScopeScreen(Screen):
 
     def action_open_assignments(self) -> None:
         from fomo.screens.assignments_screen import AssignmentsScreen
+
         self.app.push_screen(AssignmentsScreen())
 
     def action_quit_app(self) -> None:
@@ -558,20 +561,20 @@ class ScopeScreen(Screen):
 
     def action_vim_down(self) -> None:
         w = self.focused
-        if w is not None and hasattr(w,"action_cursor_down"):
+        if w is not None and hasattr(w, "action_cursor_down"):
             w.action_cursor_down()
 
     def action_vim_up(self) -> None:
         w = self.focused
-        if w is not None and hasattr(w,"action_cursor_up"):
+        if w is not None and hasattr(w, "action_cursor_up"):
             w.action_cursor_up()
 
     def action_vim_top(self) -> None:
         w = self.focused
-        if w is not None and hasattr(w,"scroll_home"):
+        if w is not None and hasattr(w, "scroll_home"):
             w.scroll_home(animate=False)
 
     def action_vim_bottom(self) -> None:
         w = self.focused
-        if w is not None and hasattr(w,"scroll_end"):
+        if w is not None and hasattr(w, "scroll_end"):
             w.scroll_end(animate=False)

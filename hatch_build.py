@@ -32,9 +32,7 @@ class CustomBuildHook(BuildHookInterface):
 
         include_file = os.path.join(self.root, "man", "fomo.1.include")
         if not os.path.isfile(include_file):
-            raise FileNotFoundError(
-                f"Man page include file not found: {include_file}"
-            )
+            raise FileNotFoundError(f"Man page include file not found: {include_file}")
 
         manpage = Manpage(
             parser,
@@ -59,6 +57,4 @@ class CustomBuildHook(BuildHookInterface):
         out_file = os.path.join(man_dir, "fomo.1")
         write_to_filename(str(manpage), out_file)
 
-        build_data.setdefault("shared_data", {})["man/fomo.1"] = (
-            "share/man/man1/fomo.1"
-        )
+        build_data.setdefault("shared_data", {})["man/fomo.1"] = "share/man/man1/fomo.1"

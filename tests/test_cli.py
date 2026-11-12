@@ -11,6 +11,7 @@ from fomo.azure import parse_duration
 # parse_duration
 # ---------------------------------------------------------------------------
 
+
 def test_parse_duration_minutes() -> None:
     assert parse_duration("30m") == "PT30M"
 
@@ -58,6 +59,7 @@ def test_parse_duration_days_unsupported() -> None:
 # Argument parser
 # ---------------------------------------------------------------------------
 
+
 def test_parser_defaults_tui_mode() -> None:
     """No positional args → TUI mode (reason is None)."""
     args = build_parser().parse_args([])
@@ -77,35 +79,27 @@ def test_parser_accepts_single_positional_at_parse_level() -> None:
 
 
 def test_parser_cli_mode_with_subscription() -> None:
-    args = build_parser().parse_args(
-        ["my-sub", "Key Vault Administrator", "-r", "Break-glass", "-t", "30m"]
-    )
+    args = build_parser().parse_args(["my-sub", "Key Vault Administrator", "-r", "Break-glass", "-t", "30m"])
     assert args.positional == ["my-sub", "Key Vault Administrator"]
     assert args.reason == "Break-glass"
     assert args.duration == "30m"
 
 
 def test_parser_dry_run_flag() -> None:
-    args = build_parser().parse_args(
-        ["Key Vault Administrator", "-r", "test", "--dry-run"]
-    )
+    args = build_parser().parse_args(["Key Vault Administrator", "-r", "test", "--dry-run"])
     assert args.dry_run is True
     assert args.reason == "test"
 
 
 def test_parser_long_flags() -> None:
-    args = build_parser().parse_args(
-        ["my-sub", "Reader", "--reason", "routine", "--time", "2h"]
-    )
+    args = build_parser().parse_args(["my-sub", "Reader", "--reason", "routine", "--time", "2h"])
     assert args.positional == ["my-sub", "Reader"]
     assert args.reason == "routine"
     assert args.duration == "2h"
 
 
 def test_parser_entra_cli_mode() -> None:
-    args = build_parser().parse_args(
-        ["--entra", "Global Reader", "-r", "Audit review", "-t", "1h"]
-    )
+    args = build_parser().parse_args(["--entra", "Global Reader", "-r", "Audit review", "-t", "1h"])
     assert args.entra is True
     assert args.positional == ["Global Reader"]
     assert args.reason == "Audit review"

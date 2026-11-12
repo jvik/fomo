@@ -98,7 +98,8 @@ def _system_is_dark() -> bool:
     try:
         result = subprocess.run(
             [
-                "dbus-send", "--session",
+                "dbus-send",
+                "--session",
                 "--dest=org.freedesktop.portal.Desktop",
                 "--print-reply",
                 "/org/freedesktop/portal/desktop",
@@ -207,9 +208,12 @@ class PimApp(App):
     def _load_account_info(self) -> None:
         if self.demo_mode:
             from fomo import demo as demo_data
+
             base = "fomo  ·  Azure PIM  [DEMO]"
             self.call_from_thread(
-                setattr, self, "title",
+                setattr,
+                self,
+                "title",
                 f"{base}  ·  {demo_data.DEMO_USER}  ·  {demo_data.DEMO_TENANT}",
             )
             return
@@ -239,9 +243,9 @@ class PimApp(App):
         worker = get_current_worker()
         proc = subprocess.Popen(
             [
-                "dbus-monitor", "--session",
-                "type='signal',interface='org.freedesktop.portal.Settings',"
-                "member='SettingChanged'",
+                "dbus-monitor",
+                "--session",
+                "type='signal',interface='org.freedesktop.portal.Settings',member='SettingChanged'",
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
