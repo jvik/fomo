@@ -5,6 +5,10 @@
   at most four subscriptions at a time instead of all of them at once.
 - F17: a failed lookup of the active assignments still lists every role as
   not active, but now says so in the log.
+- F13: the Graph device-code sign-in opens a browser only where one can be
+  seen (never a text-mode one), and survives proxy pages, rate limits and
+  server errors instead of crashing with a ``JSONDecodeError`` or a raw
+  ``HTTPError``.
 """
 
 from __future__ import annotations
@@ -18,7 +22,10 @@ import subprocess
 import threading
 import time
 import urllib.error
+import webbrowser
 from collections.abc import Callable
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -261,11 +268,13 @@ def test_failed_arm_active_lookup_is_logged(
 
 
 class _Response(io.BytesIO):
-    """What ``urlopen`` returns: a readable context manager."""
+    """What ``urlopen`` returns for a 2xx answer: a readable context manager."""
+
+    status = 200
 
 
-def _http_error(url: str, code: int, body: bytes) -> urllib.error.HTTPError:
-    return urllib.error.HTTPError(url, code, "error", email.message.Message(), io.BytesIO(body))
+def _http_error(url: str, code: int, body: bytes, reason: str = "error") -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(url, code, reason, email.message.Message(), io.BytesIO(body))
 
 
 def test_failed_entra_active_lookup_is_logged(
@@ -287,3 +296,402 @@ def test_failed_entra_active_lookup_is_logged(
 
     assert [(r.role_name, r.is_active) for r in roles] == [("Global Reader", False)]
     assert _warnings(caplog) == ["could not read active assignments for Entra roles: Insufficient privileges."]
+
+
+# ---------------------------------------------------------------------------
+# F13: when to open a browser
+# ---------------------------------------------------------------------------
+
+SSH = "10.0.0.1 50000 10.0.0.2 22"
+
+
+def _executable(path: Path, target: Path | None = None) -> Path:
+    if target is not None:
+        path.symlink_to(target)
+    else:
+        path.write_text("#!/bin/sh\n")
+        path.chmod(0o755)
+    return path
+
+
+@pytest.fixture
+def bin_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """An otherwise empty ``PATH`` and no display, SSH or ``BROWSER`` variables."""
+    for name in ("DISPLAY", "WAYLAND_DISPLAY", "SSH_CONNECTION", "SSH_TTY", "BROWSER"):
+        monkeypatch.delenv(name, raising=False)
+    path = tmp_path / "bin"
+    path.mkdir()
+    monkeypatch.setenv("PATH", str(path))
+    return path
+
+
+@pytest.mark.parametrize(
+    ("kind", "env", "wslview", "expected"),
+    [
+        ("unix", {"DISPLAY": ":0"}, False, True),
+        ("unix", {"WAYLAND_DISPLAY": "wayland-0"}, False, True),
+        ("unix", {}, False, False),
+        ("unix", {"BROWSER": "firefox"}, False, False),
+        ("unix", {"DISPLAY": "localhost:10.0", "SSH_CONNECTION": SSH}, False, False),
+        ("unix", {"WAYLAND_DISPLAY": "wayland-0", "SSH_TTY": "/dev/pts/3"}, False, False),
+        ("macos", {}, False, True),
+        ("macos", {"SSH_CONNECTION": SSH, "SSH_TTY": "/dev/ttys001"}, False, True),
+        ("windows", {}, False, True),
+        ("wsl", {}, False, False),
+        ("wsl", {}, True, True),
+        ("wsl", {"BROWSER": "/mnt/c/Program Files/Mozilla Firefox/firefox.exe"}, False, True),
+    ],
+)
+def test_can_open_browser(
+    monkeypatch: pytest.MonkeyPatch, bin_dir: Path, kind: str, env: dict[str, str], wslview: bool, expected: bool
+) -> None:
+    monkeypatch.setattr(azure, "_platform", lambda: kind)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    if wslview:
+        _executable(bin_dir / "wslview")
+
+    assert azure._can_open_browser() is expected
+
+
+def test_wsl_is_detected_from_the_environment_or_the_kernel(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("WSL_DISTRO_NAME", "WSL_INTEROP"):
+        monkeypatch.delenv(name, raising=False)
+
+    monkeypatch.setattr(azure.os, "uname", lambda: SimpleNamespace(release="7.2.15-300.fc45.x86_64"))
+    assert not azure._is_wsl()
+    monkeypatch.setattr(azure.os, "uname", lambda: SimpleNamespace(release="6.6.87.2-microsoft-standard-WSL2"))
+    assert azure._is_wsl()
+    monkeypatch.setattr(azure.os, "uname", lambda: SimpleNamespace(release="7.2.15-300.fc45.x86_64"))
+    monkeypatch.setenv("WSL_DISTRO_NAME", "Ubuntu")
+    assert azure._is_wsl()
+
+
+@pytest.mark.parametrize(
+    "browser",
+    [
+        webbrowser.GenericBrowser("lynx"),
+        webbrowser.GenericBrowser("w3m"),
+        webbrowser.GenericBrowser("links"),
+        webbrowser.GenericBrowser("elinks"),
+        webbrowser.GenericBrowser("www-browser"),
+        webbrowser.GenericBrowser("/usr/bin/w3m"),
+        webbrowser.GenericBrowser(["lynx", "-accept_all_cookies", "%s"]),  # BROWSER="lynx … %s"
+        webbrowser.GenericBrowser("lynx %s"),
+    ],
+    ids=lambda b: str(b.name),
+)
+def test_console_browsers_are_recognised(bin_dir: Path, browser: webbrowser.BaseBrowser) -> None:
+    assert azure._is_console_browser(browser)
+
+
+@pytest.mark.parametrize(
+    "browser",
+    [
+        webbrowser.BackgroundBrowser("firefox"),
+        webbrowser.BackgroundBrowser("xdg-open"),
+        webbrowser.GenericBrowser("/opt/google/chrome/google-chrome"),
+        webbrowser.BaseBrowser(),
+    ],
+    ids=lambda b: str(b.name) or "unnamed",
+)
+def test_graphical_browsers_are_not_console_browsers(bin_dir: Path, browser: webbrowser.BaseBrowser) -> None:
+    assert not azure._is_console_browser(browser)
+
+
+def test_a_link_to_a_console_browser_is_a_console_browser(bin_dir: Path) -> None:
+    w3m = _executable(bin_dir / "w3m")
+    _executable(bin_dir / "my-browser", target=w3m)
+
+    assert azure._is_console_browser(webbrowser.GenericBrowser("my-browser"))
+
+
+class _FakeBrowser(webbrowser.BaseBrowser):
+    def __init__(self, name: str, fail: bool = False) -> None:
+        super().__init__(name)
+        self.opened: list[str] = []
+        self.fail = fail
+
+    def open(self, url: str, new: int = 0, autoraise: bool = True) -> bool:
+        if self.fail:
+            raise OSError("cannot launch")
+        self.opened.append(url)
+        return True
+
+
+URL = "https://microsoft.com/devicelogin?otc=ABCD-1234"
+
+
+def _default_browser(monkeypatch: pytest.MonkeyPatch, browser: webbrowser.BaseBrowser | Exception) -> list[str]:
+    """Make ``webbrowser.get()`` return (or raise) *browser*; return a record of its calls."""
+    calls: list[str] = []
+
+    def _get(using: str | None = None) -> webbrowser.BaseBrowser:
+        calls.append(str(using))
+        if isinstance(browser, Exception):
+            raise browser
+        return browser
+
+    monkeypatch.setattr(webbrowser, "get", _get)
+    return calls
+
+
+def test_open_browser_opens_a_graphical_browser(monkeypatch: pytest.MonkeyPatch, bin_dir: Path) -> None:
+    monkeypatch.setattr(azure, "_platform", lambda: "unix")
+    monkeypatch.setenv("DISPLAY", ":0")
+    firefox = _FakeBrowser("firefox")
+    _default_browser(monkeypatch, firefox)
+
+    azure._open_browser(URL)
+
+    assert firefox.opened == [URL]
+
+
+def test_open_browser_skips_a_console_browser(monkeypatch: pytest.MonkeyPatch, bin_dir: Path) -> None:
+    monkeypatch.setattr(azure, "_platform", lambda: "unix")
+    monkeypatch.setenv("DISPLAY", ":0")
+    lynx = _FakeBrowser("lynx")
+    _default_browser(monkeypatch, lynx)
+
+    azure._open_browser(URL)
+
+    assert lynx.opened == []
+
+
+def test_open_browser_does_nothing_over_ssh(monkeypatch: pytest.MonkeyPatch, bin_dir: Path) -> None:
+    monkeypatch.setattr(azure, "_platform", lambda: "unix")
+    monkeypatch.setenv("DISPLAY", "localhost:10.0")
+    monkeypatch.setenv("SSH_CONNECTION", SSH)
+    calls = _default_browser(monkeypatch, _FakeBrowser("firefox"))
+
+    azure._open_browser(URL)
+
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "browser",
+    [webbrowser.Error("could not locate runnable browser"), _FakeBrowser("firefox", fail=True)],
+    ids=["no-browser", "launch-fails"],
+)
+def test_open_browser_never_raises(
+    monkeypatch: pytest.MonkeyPatch, bin_dir: Path, browser: webbrowser.BaseBrowser | Exception
+) -> None:
+    monkeypatch.setattr(azure, "_platform", lambda: "macos")
+    _default_browser(monkeypatch, browser)
+
+    azure._open_browser(URL)  # no exception
+
+
+def test_wsl_opens_wslview_unless_browser_is_set(monkeypatch: pytest.MonkeyPatch, bin_dir: Path) -> None:
+    monkeypatch.setattr(azure, "_platform", lambda: "wsl")
+    wslview = _executable(bin_dir / "wslview")
+    calls = _default_browser(monkeypatch, _FakeBrowser("firefox.exe"))
+
+    picked = azure._pick_browser()
+    assert isinstance(picked, webbrowser.BackgroundBrowser)
+    assert picked.name == str(wslview)
+    assert calls == []
+
+    monkeypatch.setenv("BROWSER", "firefox.exe")
+    assert azure._pick_browser().name == "firefox.exe"
+    assert calls == ["None"]
+
+
+# ---------------------------------------------------------------------------
+# F13: device-code request and polling
+# ---------------------------------------------------------------------------
+
+TENANT = "tenant-1"
+DEVICE_CODE = {
+    "device_code": "DC",
+    "user_code": "ABCD-1234",
+    "verification_uri": "https://microsoft.com/devicelogin",
+    "verification_uri_complete": URL,
+    "interval": 5,
+    "expires_in": 900,
+}
+TOKEN = {"access_token": "AT", "refresh_token": "RT", "expires_in": 3600}
+BAD_GATEWAY = (502, b"<html><body><h1>502 Bad Gateway</h1></body></html>")
+PENDING = (400, {"error": "authorization_pending", "error_description": "AADSTS70016: pending"})
+OK = (200, TOKEN)
+
+Answer = tuple[int, "dict | bytes"]
+
+
+class _Login:
+    """Fake ``login.microsoftonline.com``: the device code, then one scripted answer per token poll."""
+
+    def __init__(self, polls: list[Answer], device_code: Answer = (200, DEVICE_CODE)) -> None:
+        self.polls = list(polls)
+        self.device_code = device_code
+        self.token_polls = 0
+
+    def urlopen(self, req: Any, *args: Any, **kwargs: Any) -> _Response:
+        if req.full_url.endswith("/oauth2/v2.0/devicecode"):
+            code, body = self.device_code
+        else:
+            assert req.full_url == azure._token_endpoint(TENANT)
+            self.token_polls += 1
+            code, body = self.polls.pop(0)
+        raw = body if isinstance(body, bytes) else json.dumps(body).encode()
+        if code >= 400:
+            raise _http_error(req.full_url, code, raw, reason="Bad Gateway" if code == 502 else "error")
+        response = _Response(raw)
+        response.status = code
+        return response
+
+
+@pytest.fixture
+def login(monkeypatch: pytest.MonkeyPatch) -> Callable[..., tuple[_Login, list[float], list[str]]]:
+    """Install a fake login endpoint; return it, the poll sleeps and the URLs handed to the browser."""
+
+    def _install(polls: list[Answer], **kwargs: Any) -> tuple[_Login, list[float], list[str]]:
+        fake = _Login(polls, **kwargs)
+        sleeps: list[float] = []
+        opened: list[str] = []
+        monkeypatch.setattr(azure.urllib.request, "urlopen", fake.urlopen)
+        monkeypatch.setattr(azure.time, "sleep", sleeps.append)
+        monkeypatch.setattr(azure, "_open_browser", opened.append)
+        return fake, sleeps, opened
+
+    return _install
+
+
+def test_device_code_is_shown_and_opened_then_polled(login: Callable[..., Any]) -> None:
+    fake, sleeps, opened = login([PENDING, OK])
+    shown: list[str] = []
+
+    assert azure._device_code_flow(TENANT, on_device_code=shown.append) == TOKEN
+
+    assert shown == ["https://microsoft.com/devicelogin\nABCD-1234"]
+    assert opened == [URL]
+    assert sleeps == [5, 5]
+
+
+def test_gateway_errors_are_retried(login: Callable[..., Any]) -> None:
+    fake, sleeps, _ = login([BAD_GATEWAY, BAD_GATEWAY, OK])
+
+    assert azure._device_code_flow(TENANT) == TOKEN
+    assert fake.token_polls == 3
+    assert sleeps == [5, 5, 5]
+
+
+def test_three_non_json_answers_in_a_row_end_the_sign_in(login: Callable[..., Any]) -> None:
+    fake, _, _ = login([BAD_GATEWAY, BAD_GATEWAY, BAD_GATEWAY, OK])
+
+    with pytest.raises(RuntimeError) as excinfo:
+        azure._device_code_flow(TENANT)
+
+    assert type(excinfo.value) is RuntimeError
+    assert str(excinfo.value) == "Graph sign-in failed: HTTP 502"
+    assert fake.token_polls == 3
+
+
+def test_only_consecutive_non_json_answers_count(login: Callable[..., Any]) -> None:
+    html_200 = (200, b"<html>captive portal</html>")
+    fake, _, _ = login([BAD_GATEWAY, html_200, PENDING, BAD_GATEWAY, BAD_GATEWAY, OK])
+
+    assert azure._device_code_flow(TENANT) == TOKEN
+    assert fake.token_polls == 6
+
+
+def test_rate_limits_and_server_errors_are_retried(login: Callable[..., Any]) -> None:
+    fake, _, _ = login(
+        [
+            (429, {"error": "too_many_requests"}),
+            (503, {"error": "temporarily_unavailable", "error_description": "AADSTS90033: busy"}),
+            (500, {"error": "server_error"}),
+            (504, b""),
+            OK,
+        ]
+    )
+
+    assert azure._device_code_flow(TENANT) == TOKEN
+    assert fake.token_polls == 5
+
+
+@pytest.mark.parametrize(
+    ("interval", "polls", "expected"),
+    [
+        (60, [OK], [30]),
+        (28, [(400, {"error": "slow_down"}), PENDING, OK], [28, 30, 30]),
+        (5, [(400, {"error": "slow_down"}), OK], [5, 10]),
+    ],
+    ids=["server-asks-60", "slow-down-hits-the-cap", "slow-down-below-the-cap"],
+)
+def test_poll_interval_is_capped_at_30_seconds(
+    login: Callable[..., Any], interval: int, polls: list[Answer], expected: list[float]
+) -> None:
+    _, sleeps, _ = login(polls, device_code=(200, {**DEVICE_CODE, "interval": interval}))
+
+    assert azure._device_code_flow(TENANT) == TOKEN
+    assert sleeps == expected
+
+
+@pytest.mark.parametrize(
+    ("answer", "message"),
+    [
+        ((400, {"error": "access_denied"}), "Graph authentication was denied."),
+        ((400, {"error": "expired_token"}), "Device code expired — please try again."),
+        (
+            (400, {"error": "invalid_grant", "error_description": "AADSTS50126: bad"}),
+            "Graph authentication failed: invalid_grant: AADSTS50126: bad",
+        ),
+    ],
+    ids=["access_denied", "expired_token", "other"],
+)
+def test_oauth_errors_still_end_the_sign_in(login: Callable[..., Any], answer: Answer, message: str) -> None:
+    login([answer])
+
+    with pytest.raises(RuntimeError) as excinfo:
+        azure._device_code_flow(TENANT)
+    assert str(excinfo.value) == message
+
+
+TENANT_NOT_FOUND = (
+    400,
+    {"error": "invalid_request", "error_description": "AADSTS90002: Tenant 'tenant-1' not found."},
+)
+
+
+@pytest.mark.parametrize(
+    ("device_code", "message"),
+    [
+        (TENANT_NOT_FOUND, "Could not start Graph sign-in: HTTP 400 AADSTS90002: Tenant 'tenant-1' not found."),
+        (BAD_GATEWAY, "Could not start Graph sign-in: HTTP 502 Bad Gateway"),
+        ((200, b"<html>captive portal</html>"), "Could not start Graph sign-in: HTTP 200 unexpected response"),
+    ],
+    ids=["oauth-error", "gateway-error", "not-json"],
+)
+def test_device_code_request_errors_are_readable(login: Callable[..., Any], device_code: Answer, message: str) -> None:
+    fake, _, opened = login([], device_code=device_code)
+
+    with pytest.raises(RuntimeError) as excinfo:
+        azure._device_code_flow(TENANT)
+
+    assert type(excinfo.value) is RuntimeError  # not urllib's HTTPError or a JSONDecodeError
+    assert str(excinfo.value) == message
+    assert fake.token_polls == 0
+    assert opened == []
+
+
+def test_cli_reports_a_failed_sign_in_start(
+    monkeypatch: pytest.MonkeyPatch, login: Callable[..., Any], run_cli: Callable[[list[str]], Any]
+) -> None:
+    def _respond(cmd: list[str]) -> tuple[int, Any, str]:
+        if cmd[1:4] == USER_SHOW:
+            return 0, USER_ID, ""
+        if cmd[1:3] == ["account", "show"]:
+            return 0, {"tenantId": TENANT}, ""
+        raise AssertionError(f"unexpected az call {cmd!r}")
+
+    _fake_az(monkeypatch, _respond)
+    login([], device_code=TENANT_NOT_FOUND)
+
+    code, out, err = run_cli(["--entra", "Global Reader", "-r", "x"])
+
+    assert (code, out) == (1, ["Fetching Entra eligible roles…"])
+    assert err == [
+        "Error fetching Entra roles: Could not start Graph sign-in: HTTP 400 AADSTS90002: Tenant 'tenant-1' not found."
+    ]

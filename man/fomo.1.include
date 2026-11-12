@@ -38,7 +38,8 @@ before using this tool.
 Entra roles are managed through Microsoft Graph, which needs a scope that
 the Azure CLI's first-party application does not have.
 For these, \fBfomo\fR runs its own OAuth 2.0 device-code sign-in: it shows
-a URL and a code, opens the browser, and waits for you to sign in.
+a URL and a code, opens a graphical browser when one can be shown (not
+over SSH or without a display), and waits for you to sign in.
 The resulting access and refresh tokens are handled in-process and the
 refresh token is cached in \fI~/.cache/fomo/graph_token.json\fR
 (mode 0600), so later runs sign in silently.

@@ -11,8 +11,10 @@ import json
 import logging
 import os
 import re
+import shutil
 import stat
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -615,6 +617,119 @@ def _try_refresh_token(tenant_id: str, refresh_token: str) -> dict | None:
         return None
 
 
+# Browsers that run inside the terminal.  fomo never opens one: it would take
+# over the screen that shows the device code (and the TUI).
+_CONSOLE_BROWSERS = frozenset({"lynx", "w3m", "links", "elinks", "www-browser"})
+
+# Upper bound, in seconds, for the device-code poll interval, whatever the
+# server asks for.
+_MAX_POLL_INTERVAL = 30
+
+# Non-JSON poll answers in a row (a proxy or gateway error page, say) before
+# the sign-in gives up.
+_MAX_NON_JSON_POLLS = 3
+
+
+def _is_wsl() -> bool:
+    """True when running under Windows Subsystem for Linux."""
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+    try:
+        return "microsoft" in os.uname().release.lower()
+    except (AttributeError, OSError):
+        return False
+
+
+def _platform() -> Literal["macos", "windows", "wsl", "unix"]:
+    """The kind of desktop fomo runs on, as far as opening a browser goes."""
+    if sys.platform == "darwin":
+        return "macos"
+    if sys.platform.startswith("win"):
+        return "windows"
+    return "wsl" if _is_wsl() else "unix"
+
+
+def _can_open_browser() -> bool:
+    """Return True if a browser opened now would appear in front of the user.
+
+    - macOS and Windows: always.
+    - WSL: when ``wslview`` is on ``PATH`` or ``BROWSER`` is set.
+    - Linux and other Unix systems: when there is a display (``DISPLAY`` or
+      ``WAYLAND_DISPLAY``) and the session is not over SSH, where a browser
+      would open on the remote machine, if anywhere.
+    """
+    kind = _platform()
+    if kind in ("macos", "windows"):
+        return True
+    if kind == "wsl":
+        return bool(shutil.which("wslview") or os.environ.get("BROWSER"))
+    if os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY"):
+        return False
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
+
+def _is_console_browser(browser: webbrowser.BaseBrowser) -> bool:
+    """Return True if *browser* runs in the terminal (lynx, w3m, links, elinks, www-browser).
+
+    A command found on ``PATH`` is also judged by the file it links to, so a
+    ``BROWSER`` or alternatives symlink to ``w3m`` counts as ``w3m``.
+    """
+    words = (getattr(browser, "name", "") or "").split()
+    if not words:
+        return False
+    command = words[0]
+    names = {os.path.basename(command).lower()}
+    path = shutil.which(command)
+    if path:
+        names.add(os.path.basename(os.path.realpath(path)).lower())
+    return not names.isdisjoint(_CONSOLE_BROWSERS)
+
+
+def _pick_browser() -> webbrowser.BaseBrowser:
+    """Return the browser to open: ``wslview`` on WSL unless ``BROWSER`` says otherwise, else the default."""
+    if "BROWSER" not in os.environ and _platform() == "wsl":
+        wslview = shutil.which("wslview")
+        if wslview:
+            return webbrowser.BackgroundBrowser(wslview)
+    return webbrowser.get()
+
+
+def _open_browser(url: str) -> None:
+    """Open *url* in a graphical browser if one can be shown; never fail.
+
+    The device code is always shown as text as well, so a browser that can't
+    be opened (no display, SSH, only a text-mode browser) costs nothing.
+    """
+    if not _can_open_browser():
+        log.debug("not opening a browser: no display, or an SSH session")
+        return
+    try:
+        browser = _pick_browser()
+        if _is_console_browser(browser):
+            log.debug("not opening text-mode browser %s", getattr(browser, "name", "?"))
+            return
+        browser.open(url)
+    except Exception as exc:
+        log.debug("could not open a browser: %s", exc)
+
+
+def _json_object(raw: bytes) -> dict | None:
+    """Parse *raw* as a JSON object; None if it isn't one (an HTML error page, say)."""
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _error_body(exc: urllib.error.HTTPError) -> bytes:
+    """The body of an HTTP error response, or b"" if it can't be read."""
+    try:
+        return exc.read()
+    except (OSError, ValueError):
+        return b""
+
+
 def _device_code_flow(
     tenant_id: str,
     on_device_code: Callable[[str], None] | None = None,
@@ -623,8 +738,14 @@ def _device_code_flow(
     """Run the OAuth 2.0 device authorization grant and return the token dict.
 
     Calls *on_device_code* with the user-facing message once the device code
-    is ready, then opens the verification URL in the system browser and polls
-    until the user completes authentication.
+    is ready, then opens the verification URL in a browser (when one can be
+    shown, see :func:`_open_browser`) and polls until the user completes
+    authentication.
+
+    Polling tolerates a busy or flaky endpoint: HTTP 429 and 5xx answers, and
+    answers that aren't JSON, are retried after the poll interval (at most
+    30 s).  Three non-JSON answers in a row end the sign-in with
+    "Graph sign-in failed: HTTP <code>".
     """
     dc_req = urllib.request.Request(
         f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/devicecode",
@@ -636,8 +757,16 @@ def _device_code_flow(
         ).encode(),
         method="POST",
     )
-    with urllib.request.urlopen(dc_req) as resp:
-        dc = json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(dc_req) as resp:
+            status = getattr(resp, "status", 200)
+            dc = _json_object(resp.read())
+    except urllib.error.HTTPError as exc:
+        error_body = _json_object(_error_body(exc)) or {}
+        detail = error_body.get("error_description") or error_body.get("error") or exc.reason or ""
+        raise RuntimeError(_redact(f"Could not start Graph sign-in: HTTP {exc.code} {detail}".rstrip())) from None
+    if dc is None or "device_code" not in dc:
+        raise RuntimeError(f"Could not start Graph sign-in: HTTP {status} unexpected response")
 
     if on_device_code is not None:
         user_code = dc.get("user_code", "")
@@ -647,11 +776,12 @@ def _device_code_flow(
     # Open the browser to the pre-filled URL when available.
     browser_url = dc.get("verification_uri_complete") or dc.get("verification_uri", "")
     if browser_url:
-        webbrowser.open(browser_url)
+        _open_browser(browser_url)
 
-    interval = int(dc.get("interval", 5))
+    interval = min(int(dc.get("interval", 5)), _MAX_POLL_INTERVAL)
     deadline = time.time() + int(dc.get("expires_in", 900))
     token_endpoint = _token_endpoint(tenant_id)
+    non_json = 0  # non-JSON answers in a row
 
     while time.time() < deadline:
         if stop_event is not None:
@@ -673,23 +803,36 @@ def _device_code_flow(
         )
         try:
             with urllib.request.urlopen(poll_req) as resp:
-                return json.loads(resp.read())
+                code = getattr(resp, "status", 200)
+                body = _json_object(resp.read())
         except urllib.error.HTTPError as exc:
-            body = json.loads(exc.read())
-            error = body.get("error", "")
-            if error == "authorization_pending":
-                continue
-            elif error == "slow_down":
-                interval += 5
-                continue
-            elif error == "access_denied":
-                raise RuntimeError("Graph authentication was denied.") from None
-            elif error == "expired_token":
-                raise RuntimeError("Device code expired — please try again.") from None
-            else:
-                raise RuntimeError(
-                    f"Graph authentication failed: {error}: {body.get('error_description', '')}"
-                ) from None
+            code = exc.code
+            body = _json_object(_error_body(exc))
+        else:
+            if body is not None:
+                return body
+
+        if body is None:
+            non_json += 1
+            if non_json >= _MAX_NON_JSON_POLLS:
+                raise RuntimeError(f"Graph sign-in failed: HTTP {code}")
+            log.debug("device-code poll: HTTP %d without a JSON body, retrying", code)
+            continue
+        non_json = 0
+        if code == 429 or code >= 500:
+            log.debug("device-code poll: HTTP %d, retrying", code)
+            continue
+        error = body.get("error", "")
+        if error == "authorization_pending":
+            continue
+        if error == "slow_down":
+            interval = min(interval + 5, _MAX_POLL_INTERVAL)
+            continue
+        if error == "access_denied":
+            raise RuntimeError("Graph authentication was denied.")
+        if error == "expired_token":
+            raise RuntimeError("Device code expired — please try again.")
+        raise RuntimeError(f"Graph authentication failed: {error}: {body.get('error_description', '')}")
 
     raise RuntimeError("Device code authentication timed out — please try again.")
 

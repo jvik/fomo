@@ -2,7 +2,7 @@
 
 Every test is hermetic by default.  The autouse ``_hermetic`` fixture makes any
 attempt at real I/O (``subprocess.run``, ``urllib.request.urlopen``,
-``webbrowser.open``) fail loudly, and points every on-disk cache at
+``webbrowser.open``/``get``) fail loudly, and points every on-disk cache at
 ``tmp_path``.  Tests that need Azure data opt in to ``fake_azure``, which
 replaces the public functions of ``fomo.azure`` with in-memory fakes.
 """
@@ -47,6 +47,9 @@ def _hermetic(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> Any:
     monkeypatch.setattr(subprocess, "run", _blocked("subprocess.run"))
     monkeypatch.setattr(urllib.request, "urlopen", _blocked("urllib.request.urlopen"))
     monkeypatch.setattr(webbrowser, "open", _blocked("webbrowser.open"))
+    # fomo.azure picks a browser with webbrowser.get() (or wslview on WSL) and opens that one.
+    monkeypatch.setattr(webbrowser, "get", _blocked("webbrowser.get"))
+    monkeypatch.setattr(webbrowser.BackgroundBrowser, "open", _blocked("webbrowser.BackgroundBrowser.open"))
 
     monkeypatch.setattr(azure, "_TOKEN_CACHE_PATH", str(tmp_path / "graph_token.json"))
     monkeypatch.setattr(azure, "_graph_token_cache", None)
