@@ -17,7 +17,7 @@ from textual.theme import Theme
 from textual.widgets import Button, Label
 from textual.worker import get_current_worker
 
-from fomo import azure
+from fomo import azure, state
 from fomo.backend import Backend, make_backend
 from fomo.screens._common import safe_markup
 from fomo.screens.keys_screen import KeysScreen, binding_rows, screen_key_rows
@@ -292,6 +292,8 @@ class PimApp(App):
         self.entra = entra
         self.demo_mode = demo_mode
         self.backend: Backend = make_backend(dry_run=dry_run, demo_mode=demo_mode)
+        # Recent activations: the state file, or this session only (demo mode, FOMO_NO_STATE).
+        self.recents: state.RecentStore = state.open_store(demo_mode)
         override = _theme_override()
         # Dark until the system's colour scheme is known (see on_mount).
         self.theme = override or "fomo-dark"

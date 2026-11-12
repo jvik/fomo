@@ -13,7 +13,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Header, Input, Label, LoadingIndicator
 from textual.widgets.selection_list import Selection
 
-from fomo import azure, tiering, timefmt
+from fomo import azure, state, tiering, timefmt
 from fomo.screens._common import (
     VIM_BINDINGS,
     FomoScreen,
@@ -110,10 +110,28 @@ class RolesScreen(VimNavMixin, FomoScreen):
         *VIM_BINDINGS,
     ]
 
-    def __init__(self, subscription_ids: list[str], subscription_names: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        subscription_ids: list[str],
+        subscription_names: dict[str, str] | None = None,
+        *,
+        recent: state.Recent | None = None,
+    ) -> None:
+        """*recent* (a recent Azure activation) is started once the roles have loaded.
+
+        If all of its roles are eligible and inactive, the activation screen
+        opens straight away; otherwise those that are left are selected, and
+        a toast names the others.  Either way, the activation screen starts
+        with its justification and duration.
+        """
         super().__init__()
         self._sub_ids = subscription_ids
         self._sub_names = subscription_names or {}
+        self._recent = recent
+        # The activation screen's justification and duration, if not its defaults.
+        self._prefill: dict[str, str] = (
+            {"justification": recent.justification, "duration": recent.duration} if recent is not None else {}
+        )
         self.all_roles: list[azure.EligibleRole] = []
         self._selected: set[int] = set()  # indices into all_roles
         self._visible_indices: set[int] = set()
@@ -272,6 +290,22 @@ class RolesScreen(VimNavMixin, FomoScreen):
         # Keep the filter: after a retry the list may already have been in use.
         self._rebuild_list(self.query_one("#filter", Input).value)
         self.query_one("#filter").focus()
+        if self._recent is not None:
+            recent, self._recent = self._recent, None
+            self._start_recent(recent)
+
+    def _start_recent(self, recent: state.Recent) -> None:
+        """Select *recent*'s roles; activate them at once if nothing is in the way."""
+        match = state.match_targets(recent, self.all_roles, state.azure_target)
+        self._selected = set(match.ready)
+        self._rebuild_list(self.query_one("#filter", Input).value)
+        # Not when another screen (a dialog) has come up meanwhile.
+        if match.complete and self.app.screen is self:
+            self.action_proceed()
+            return
+        self.query_one("#role-list").focus()
+        if not match.complete:
+            self.notify(match.problems(), title="Recent activation", severity="warning", timeout=10, markup=False)
 
     # ------------------------------------------------------------------
     # List management
@@ -574,7 +608,8 @@ class RolesScreen(VimNavMixin, FomoScreen):
             )
         from fomo.screens.activation_screen import ActivationScreen
 
-        self.app.push_screen(ActivationScreen(selected_roles), self._after_activation)
+        screen = ActivationScreen(selected_roles, subscriptions=self._sub_ids, **self._prefill)
+        self.app.push_screen(screen, self._after_activation)
 
     def _after_activation(self, result: ActivationResult[azure.EligibleRole] | None) -> None:
         """Back from the activation screen.

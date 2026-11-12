@@ -1,4 +1,4 @@
-"""Human-readable end times for eligible roles, activations and assignments.
+"""Human-readable end times for eligible roles, activations and assignments, and durations.
 
 Azure and Microsoft Graph return end times as ISO 8601 strings in UTC.  These
 helpers turn them into "47m left", "14:32 (47m left)" or "2026-12-31".  They
@@ -89,6 +89,21 @@ def format_end(iso: str | None, now: datetime) -> str:
     local = end.astimezone(now.tzinfo)
     clock = local.strftime("%H:%M") if local.date() == now.date() else local.strftime("%a %H:%M")
     return f"{clock} ({format_remaining(iso, now)})"
+
+
+_SIMPLE_DURATION_RE = re.compile(r"PT(?:(\d+)H)?(?:(\d+)M)?")
+
+
+def format_duration(iso: str) -> str:
+    """A short activation duration: "PT1H" is "1h", "PT30M" "30m", "PT1H30M" "1h 30m".
+
+    Anything else, such as days, is returned as given.
+    """
+    match = _SIMPLE_DURATION_RE.fullmatch(iso)
+    if match is None or not any(match.groups()):
+        return iso
+    hours, minutes = match.groups()
+    return " ".join(part for part in (f"{hours}h" if hours else "", f"{minutes}m" if minutes else "") if part)
 
 
 def end_sort_key(iso: str | None) -> tuple[int, float, str]:

@@ -13,6 +13,10 @@ relabelled "Retry failed (N)"), show the active assignments (``i``), quit
 (``q``), or Done (Enter), which returns to the first screen.  The screen
 dismisses with an :class:`ActivationResult`, so the screen below can mark the
 activated roles active and clear its selection.
+
+A run in which any request went through is remembered as a recent activation
+(``app.recents``), so that the scope screen can start it again; the form can
+be prefilled with a recent activation's justification and duration.
 """
 
 from __future__ import annotations
@@ -37,7 +41,7 @@ from textual.notifications import SeverityLevel
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog, Select
 
-from fomo import azure, tiering
+from fomo import azure, state, tiering
 from fomo.screens._common import FomoScreen
 
 _DURATION_OPTIONS: list[tuple[str, str]] = [
@@ -48,6 +52,7 @@ _DURATION_OPTIONS: list[tuple[str, str]] = [
     ("6 hours", "PT6H"),
     ("8 hours", "PT8H"),
 ]
+DEFAULT_DURATION = "PT1H"
 
 RoleT = TypeVar("RoleT", azure.EligibleRole, azure.EntraEligibleRole)
 
@@ -306,9 +311,14 @@ class ActivationScreenBase(FomoScreen[ActivationResult[RoleT] | None], Generic[R
     _log: ClassVar[logging.Logger]
     _FAILURE_LOG_MESSAGE: ClassVar[str]
 
-    def __init__(self, roles: list[RoleT]) -> None:
+    def __init__(self, roles: list[RoleT], *, justification: str = "", duration: str = DEFAULT_DURATION) -> None:
+        """*justification* and *duration* prefill the form (a recent activation)."""
         super().__init__()
         self.roles: list[RoleT] = roles
+        self._initial_justification = justification
+        self._initial_duration = duration if duration in {value for _, value in _DURATION_OPTIONS} else DEFAULT_DURATION
+        # The reason, duration and running row indices of the latest run.
+        self._run: tuple[str, str, list[int]] | None = None
         self._activating = False
         self._finished = False  # a run has finished; later runs only retry failed rows
         self._errors: dict[int, str] = {}  # running row index → full error message
@@ -338,6 +348,10 @@ class ActivationScreenBase(FomoScreen[ActivationResult[RoleT] | None], Generic[R
         """Submit one activation and return its status string."""
         raise NotImplementedError
 
+    def _recent_entry(self, roles: Sequence[RoleT], justification: str, duration: str) -> state.Recent | None:
+        """The recent activation to remember for *roles*, or ``None`` to remember nothing."""
+        raise NotImplementedError
+
     # ------------------------------------------------------------------
     # Layout
     # ------------------------------------------------------------------
@@ -349,11 +363,15 @@ class ActivationScreenBase(FomoScreen[ActivationResult[RoleT] | None], Generic[R
             # The reason comes before the duration so that Tab moves from one to the other.
             with Horizontal(id="form"):
                 yield Label("Reason", id="reason-label", classes="form-label")
-                yield Input(placeholder="Justification (required, for all roles)", id="justification")
+                yield Input(
+                    self._initial_justification,
+                    placeholder="Justification (required, for all roles)",
+                    id="justification",
+                )
                 yield Label("Duration", id="duration-label", classes="form-label")
                 # No blank row: a blank Select's value is Select.NULL, which is
                 # truthy and would reach activate_role as the duration.
-                yield Select(_DURATION_OPTIONS, value="PT1H", allow_blank=False, id="duration")
+                yield Select(_DURATION_OPTIONS, value=self._initial_duration, allow_blank=False, id="duration")
             with RolesScroll(id="roles-scroll"):
                 yield from self._compose_tables()
             # Wrapped to the panel's width; it opens on the first failure, not the last.
@@ -449,7 +467,8 @@ class ActivationScreenBase(FomoScreen[ActivationResult[RoleT] | None], Generic[R
             self.notify("Justification is required.", severity="warning")
             self.query_one("#justification").focus()
             return
-        duration = self.query_one("#duration", Select).value or "PT1H"
+        selected = self.query_one("#duration", Select).value
+        duration = selected if isinstance(selected, str) and selected else DEFAULT_DURATION
         rows = self._rows()
         if self._finished:
             retry = set(self._failed_rows())
@@ -459,6 +478,7 @@ class ActivationScreenBase(FomoScreen[ActivationResult[RoleT] | None], Generic[R
             error_log = self.query_one("#error-log", RichLog)
             error_log.clear()
             error_log.add_class("hidden")
+        self._run = (justification, duration, [entry[0] for entry in rows])
         self._activating = True
         btn_activate.disabled = True
         self.query_one("#btn-back", Button).disabled = True
@@ -592,11 +612,27 @@ class ActivationScreenBase(FomoScreen[ActivationResult[RoleT] | None], Generic[R
         btn_back.label = "Done"
         btn_back.focus()
         self.refresh_bindings()
+        self._remember_run()
         # The outcome of every row, retried or not, e.g. "2 activated · 1 failed".
         summary, severity = summarize_outcomes(self._outcomes.values())
         if failed:
             summary += " — see Details below."
         self.notify(summary, severity=severity, timeout=8 if severity == "error" else None, markup=False)
+
+    def _remember_run(self) -> None:
+        """Remember the roles as a recent activation if any of the latest run's requests went through.
+
+        All of the screen's roles are remembered, with the reason and
+        duration of the latest run, so that a retry updates the same entry.
+        """
+        if self._run is None:
+            return
+        justification, duration, indices = self._run
+        if all(self._outcomes.get(index) is Outcome.FAILED for index in indices):
+            return
+        entry = self._recent_entry([role for _, _, _, role in self._rows()], justification, duration)
+        if entry is not None:
+            self.app.recents.add(entry)  # type: ignore[attr-defined]
 
     @staticmethod
     def _format_status(status: str) -> Text:

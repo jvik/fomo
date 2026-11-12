@@ -40,12 +40,12 @@ fomo/
   azure.py             # All Azure I/O: `az rest` for ARM, urllib for Graph/OAuth; dataclasses
   backend.py           # Backend: AzureBackend (real APIs) or DemoBackend (--demo) for the TUI
   demo.py              # Dummy data for --demo mode and screenshots
-  state.py             # fomo's private files: write_private_json (0600 file in a 0700 directory, atomic)
+  state.py             # fomo's private files: write_private_json (0600, atomic) and the recent activations store (state.json)
   tiering.py           # Blast-radius tier data (emiliensocchi/azure-tiering), fetched and cached
   timefmt.py           # Pure helpers for end times: "47m left", "14:32 (47m left)", dates
   widgets.py           # Custom Textual widgets (FomoSelectionList)
   screens/
-    scope_screen.py    # Step 1 — Azure tab (subscriptions) and Entra tab (Entra roles)
+    scope_screen.py    # Step 1 — Azure tab (subscriptions), Entra tab (Entra roles), Recent tab (keys 1-5)
     roles_screen.py    # Step 2 — multiselect eligible Azure roles
     activation_screen.py  # Step 3 — Azure justification form + per-role progress table
     entra_screen.py    # Entra activation screen

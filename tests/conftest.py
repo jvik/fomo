@@ -2,9 +2,10 @@
 
 Every test is hermetic by default.  The autouse ``_hermetic`` fixture makes any
 attempt at real I/O (``subprocess.run``, ``urllib.request.urlopen``,
-``webbrowser.open``/``get``) fail loudly, and points every on-disk cache at
-``tmp_path``.  Tests that need Azure data opt in to ``fake_azure``, which
-replaces the public functions of ``fomo.azure`` with in-memory fakes.
+``webbrowser.open``/``get``) fail loudly, and points every on-disk cache, and
+the state file, at ``tmp_path``.  Tests that need Azure data opt in to
+``fake_azure``, which replaces the public functions of ``fomo.azure`` with
+in-memory fakes.
 """
 
 from __future__ import annotations
@@ -59,6 +60,10 @@ def _hermetic(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> Any:
     monkeypatch.setattr(tiering, "_azure_index", {})
     monkeypatch.setattr(tiering, "_entra_index", {})
     monkeypatch.setattr(tiering, "_fetch_json", lambda url: None)
+
+    # The recent activations state file (fomo.state.state_path()).
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.delenv("FOMO_NO_STATE", raising=False)
 
     yield
 

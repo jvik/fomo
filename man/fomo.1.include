@@ -96,6 +96,22 @@ activation screen.
 Like Step\~3: enter a justification, choose a duration and press
 \fBActivate\fR.
 Each Entra role's status is shown in a live table.
+.SS Recent tab
+\fBfomo\fR remembers the last five activations made in the TUI (the
+roles, the justification and the duration; see \fBFILES\fR) and lists them
+on a third tab of the first screen, \fBRecent\fR, which appears after the
+first activation.
+Press \fB1\fR to \fB5\fR to start one again: the same subscriptions are
+loaded (or the Entra tab), the same roles are selected and, if they are
+all still eligible and not active, the activation screen opens with the
+justification and duration filled in, so \fB1\fR then \fBEnter\fR
+activates them.
+The justification and duration can still be changed first.
+Otherwise the role list is shown with the remaining roles selected, and a
+notice names the roles that are already active or no longer eligible.
+An activation is remembered when at least one of its roles was activated
+or is pending approval (simulated activations in \fB\-\-dry\-run\fR
+count too).
 .SS Assignments screen
 Press \fBi\fR on the first screen to see your currently active Azure and
 Entra role assignments, on separate \fBAzure\fR and \fBEntra\fR tabs.
@@ -122,13 +138,18 @@ Switch between the dark and the light theme, also while typing.
 Quit (with text selected, copy it instead).
 The footer shows it wherever \fBq\fR doesn't quit: while typing in a
 field, and on screens where \fBq\fR goes back.
-.SS Subscription and Entra tab screen
+.SS Subscription, Entra and Recent tab screen
 .TP
 .B Enter
-On the tab bar, move to the filter.
+On the tab bar, move to the filter (the list on the Recent tab).
 In the filter, move to the list.
-In the list, load roles for the selected subscriptions (Azure tab) or
-continue to activation with the selected roles (Entra tab).
+In the list, load roles for the selected subscriptions (Azure tab),
+continue to activation with the selected roles (Entra tab), or start the
+highlighted recent activation (Recent tab).
+.TP
+.BR 1 \ \(en\  5
+Start that recent activation again (see \fBRecent tab\fR), from any tab.
+While a filter has focus, the digits are typed into it instead.
 .TP
 .BR x \ /\  Space
 Toggle the highlighted item.
@@ -344,6 +365,15 @@ Blast-radius tier data downloaded from the
 .I emiliensocchi/azure-tiering
 GitHub repository.
 Refreshed when older than 7 days.
+.TP
+.I ~/.local/state/fomo/state.json
+The recent activations of the TUI (see \fBRecent tab\fR): at most five,
+each with its roles, duration and justification text (mode 0600, in a
+directory of mode 0700).
+\fI$XDG_STATE_HOME/fomo/state.json\fR when \fBXDG_STATE_HOME\fR is set.
+Never written in demo mode or with \fBFOMO_NO_STATE\fR set, nor by the
+CLI mode; a corrupt file is ignored.
+Delete it to forget the recent activations.
 
 [ENVIRONMENT]
 .TP
@@ -358,8 +388,8 @@ executable must be on
 and the session must be authenticated (\fBaz login\fR).
 .TP
 .B HOME
-The token and tiering caches live in \fI$HOME/.cache/fomo/\fR
-(see \fBFILES\fR).
+The token and tiering caches live in \fI$HOME/.cache/fomo/\fR, and the
+state file in \fI$HOME/.local/state/fomo/\fR (see \fBFILES\fR).
 .TP
 .B FOMO_THEME
 \fBdark\fR or \fBlight\fR: use that theme and skip detecting the system's
@@ -369,6 +399,15 @@ Without it, \fBfomo\fR starts dark and switches to light shortly after
 startup if the desktop prefers it (the freedesktop portal, GNOME or KDE
 settings, or \fBGTK_THEME\fR on Linux; the system appearance on macOS).
 \fBCtrl\-t\fR switches theme at any time.
+.TP
+.B FOMO_NO_STATE
+Set to \fB1\fR (any value but empty or \fB0\fR) to keep nothing on disk
+about recent activations: the state file is neither read nor written, and
+the \fBRecent\fR tab only lists the activations of the current session.
+.TP
+.B XDG_STATE_HOME
+Where the state file lives (see \fBFILES\fR); \fI~/.local/state\fR when
+unset or not an absolute path.
 .TP
 .B TERM
 A terminal emulator that supports 256 colours and Unicode is recommended

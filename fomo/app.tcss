@@ -339,6 +339,31 @@ DataTable {
     background: $panel;
 }
 
+/* Recent tab: laid out like the Azure tab (padding, title, a framed list
+   filling the space, a line under it), so nothing moves between tabs. */
+#recent-pane {
+    padding: 1 2;
+    height: 1fr;
+}
+
+#recent-title {
+    margin: 1 0;
+    color: $text-muted;
+    text-style: italic;
+}
+
+#recent-list {
+    height: 1fr;
+    border: round $panel;
+    padding: 0 1;
+}
+
+#recent-hint {
+    width: 1fr;
+    margin-top: 1;
+    color: $text-muted;
+}
+
 /* Entra tab pane within ScopeScreen */
 #entra-loading-area {
     padding: 1 2;

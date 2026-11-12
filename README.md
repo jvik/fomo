@@ -8,6 +8,7 @@ A terminal UI for activating Azure PIM eligible roles with multiselect.
 - **Azure RBAC & Entra roles** — supports both subscription/resource-scoped PIM roles and Entra directory roles (Global Administrator, etc.)
 - **Management group scope** — activate roles at management group level (CLI only, with `--mg`; the TUI has no management-group picker)
 - **Batch activation** — all selected roles are submitted in one go, one after another (not in parallel), with per-role progress tracking
+- **Recent activations** — activate the same roles again with `1` then `⏎`, reason and duration filled in (see [Recent activations](#recent-activations))
 - **Non-interactive CLI mode** — skip the TUI with `-r`/`--reason` for scripting and automation
 - **Dry-run mode** — simulate activation without making any real API calls
 - **Cached Entra token** — the Microsoft Graph refresh token is cached at `~/.cache/fomo/graph_token.json`, so the device code sign-in is only needed again when that refresh token expires
@@ -133,6 +134,18 @@ fomo --log /tmp/fomo.log
 ```
 
 Logs include all `az rest` and Graph API calls and responses. Useful for troubleshooting.
+
+### Recent activations
+
+fomo remembers your last five TUI activations (the roles, the reason and the duration) and lists them on a third tab of the first screen, **Recent**, which appears after your first activation. Press `1`–`5` on the first screen (outside the filter fields) to start one again: fomo loads the same subscriptions or the Entra roles, selects the same roles and, if they are all still eligible and not active, opens the activation screen with the reason and duration filled in. Press `⏎` to activate, or change the reason or duration first. If a role is already active or no longer eligible, you get the role list with the others selected and a note saying which ones are missing.
+
+The list is kept in `~/.local/state/fomo/state.json` (or `$XDG_STATE_HOME/fomo/state.json`), readable only by you (mode `0600`). It includes the **reason text** you entered, so don't put anything in a reason that shouldn't be stored on your disk. An activation is remembered when at least one of its roles was activated or is pending approval (simulated activations in `--dry-run` count too). Demo mode (`--demo`) never writes the file. To turn the feature off, set `FOMO_NO_STATE=1`: fomo then neither reads nor writes the file, and remembers activations only until it exits:
+
+```sh
+FOMO_NO_STATE=1 fomo
+```
+
+The CLI mode (`-r`) never reads or writes the file.
 
 ### Non-interactive (CLI) mode
 

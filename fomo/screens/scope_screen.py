@@ -1,4 +1,8 @@
-"""Scope screen — pick which Azure subscriptions to load PIM roles from."""
+"""Scope screen — pick which Azure subscriptions to load PIM roles from.
+
+Its Entra tab lists the eligible Entra roles, and its Recent tab, shown once
+there is something on it, the recent activations: keys 1-5 start one again.
+"""
 
 from __future__ import annotations
 
@@ -10,19 +14,21 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.content import Content
+from textual.css.query import NoMatches
 from textual.widgets import (
     Footer,
     Header,
     Input,
     Label,
     LoadingIndicator,
+    OptionList,
     TabbedContent,
     TabPane,
     Tabs,
 )
 from textual.widgets.selection_list import Selection
 
-from fomo import azure, tiering, timefmt
+from fomo import azure, state, tiering, timefmt
 from fomo.screens._common import (
     MOVE,
     TABS,
@@ -42,10 +48,59 @@ if TYPE_CHECKING:
 
 MAX_SUBSCRIPTIONS = 3
 ENTRA_SORT_MODES = ("name", "tier", "expiry")
+# Keys 1-5 start a recent activation; the Keys screen (?) lists them on one row.
+RECENT = Binding.Group("Activate recent")
+# A recent activation's justification is cut to this many characters in its row.
+_RECENT_REASON_WIDTH = 30
+# The filter, selection and sort keys of the other tabs do nothing on the Recent tab.
+_NOT_ON_RECENT_TAB = frozenset(
+    {"focus_filter", "escape_key", "select_all", "select_none", "cycle_sort", "select_focused"}
+)
+
+
+def recent_prompt(number: int, recent: state.Recent) -> Content:
+    """An entry of the Recent tab: its number and roles, then its duration and reason, dimmed.
+
+    E.g.::
+
+        1  Key Vault Administrator · Contoso Production
+           1h · "INC-4711 prod hotfix"
+
+    Each role is on a line of its own, and the reason is cut to 30
+    characters, so that an entry doesn't wrap in an 80-column terminal.
+    """
+    reason = recent.justification
+    if len(reason) > _RECENT_REASON_WIDTH:
+        reason = reason[: _RECENT_REASON_WIDTH - 1].rstrip() + "…"
+    indent = " " * (len(str(number)) + 2)
+    lines = [safe_markup("[bold]$number[/bold]  $label", number=number, label=recent.label(0))]
+    lines.extend(Content(indent + recent.label(i)) for i in range(1, len(recent.targets)))
+    lines.append(
+        safe_markup(
+            f'{indent}[dim]$duration · "$reason"[/dim]',
+            duration=timefmt.format_duration(recent.duration),
+            reason=reason,
+        )
+    )
+    return Content("\n").join(lines)
+
+
+def _recent_pane() -> TabPane:
+    """The Recent tab: the recent activations, filled in by ``ScopeScreen._show_recents``."""
+    return TabPane(
+        "Recent",
+        Vertical(
+            Label("Recent activations", id="recent-title"),
+            OptionList(id="recent-list"),
+            Label("", id="recent-hint"),
+            id="recent-pane",
+        ),
+        id="tab-recent",
+    )
 
 
 class ScopeScreen(VimNavMixin, FomoScreen):
-    """First screen: select Azure subscriptions or Entra roles."""
+    """First screen: select Azure subscriptions or Entra roles, or start a recent activation."""
 
     BINDINGS = [
         # Priority bindings: Enter in a filter input never reaches Input.Submitted.
@@ -67,6 +122,11 @@ class ScopeScreen(VimNavMixin, FomoScreen):
         Binding("up", "arrow_up", "Up", show=False, group=MOVE),
         Binding("down", "arrow_down", "Down", show=False, group=MOVE),
         *VIM_BINDINGS,
+        # Not while typing: a focused filter takes the digits.
+        *(
+            Binding(str(n), f"start_recent({n - 1})", f"Recent {n}", show=False, group=RECENT)
+            for n in range(1, state.MAX_RECENT + 1)
+        ),
     ]
 
     def __init__(self, initial_tab: str = "tab-azure") -> None:
@@ -90,6 +150,12 @@ class ScopeScreen(VimNavMixin, FomoScreen):
         self._option_values: list[int] = []
         self._entra_rebuilding = False
         self._entra_sort_mode = ENTRA_SORT_MODES[0]
+        # A recent Entra activation to start once the Entra roles have loaded.
+        self._entra_recent: state.Recent | None = None
+        # The Entra activation screen's justification and duration, from a recent activation.
+        self._entra_prefill: dict[str, str] = {}
+        # Recent tab: the entries it shows (None until first shown).
+        self._recents: list[state.Recent] | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -115,6 +181,9 @@ class ScopeScreen(VimNavMixin, FomoScreen):
                             "[dim]Navigate the list to see role details.[/dim]",
                             id="entra-detail",
                         )
+            # Only once there are recent activations (see on_screen_resume).
+            if self.app.recents.entries():  # type: ignore[attr-defined]
+                yield _recent_pane()
         yield Label("[bold]←/→[/bold] switch tab  •  [bold]Tab[/bold] enter list", id="tab-hint")
         yield Footer()
 
@@ -124,10 +193,20 @@ class ScopeScreen(VimNavMixin, FomoScreen):
         self.query_one("#sel-count").display = False
         self.query_one("#entra-split").display = False
         self.query_one("#entra-spinner").display = False
+        self._show_recents()
         self._load_subs()
         if self._initial_tab == "tab-entra":
             self._start_entra_load()
         self.call_after_refresh(self.query_one("#scope-tabs").focus)
+
+    async def on_screen_resume(self) -> None:
+        # Back from an activation, which may have added a recent activation,
+        # or the first one: then the Recent tab appears.
+        if not self.is_mounted:
+            return
+        if self.app.recents.entries() and not self.query("#recent-list"):  # type: ignore[attr-defined]
+            await self.query_one("#scope-tabs", TabbedContent).add_pane(_recent_pane())
+        self._show_recents()
 
     def on_unmount(self) -> None:
         self._stop_event.set()
@@ -139,11 +218,27 @@ class ScopeScreen(VimNavMixin, FomoScreen):
     def _active_tab(self) -> str:
         return self.query_one("#scope-tabs", TabbedContent).active or "tab-azure"
 
+    def _on_recent_tab(self) -> bool:
+        try:
+            return self._active_tab() == "tab-recent"
+        except NoMatches:  # not composed yet
+            return False
+
+    def _tab_ids(self) -> list[str]:
+        """The tabs that are shown, in order."""
+        return ["tab-azure", "tab-entra", *(["tab-recent"] if self._recents else [])]
+
     def action_next_tab(self) -> None:
-        self._switch_tab("tab-entra" if self._active_tab() == "tab-azure" else "tab-azure")
+        self._step_tab(1)
 
     def action_prev_tab(self) -> None:
-        self._switch_tab("tab-azure" if self._active_tab() == "tab-entra" else "tab-entra")
+        self._step_tab(-1)
+
+    def _step_tab(self, step: int) -> None:
+        tabs = self._tab_ids()
+        current = self._active_tab()
+        position = tabs.index(current) if current in tabs else 0
+        self._switch_tab(tabs[(position + step) % len(tabs)])
 
     def _switch_tab(self, target: str) -> None:
         """Activate *target* and move focus to its list (``h``/``l``)."""
@@ -159,7 +254,9 @@ class ScopeScreen(VimNavMixin, FomoScreen):
         """Focus the list on *target* if it has loaded; else keep the tab bar."""
         if not self.is_attached or self._active_tab() != target or not isinstance(self.focused, Tabs):
             return
-        if target == "tab-entra":
+        if target == "tab-recent":
+            self.query_one("#recent-list").focus()
+        elif target == "tab-entra":
             if not self._entra_loaded:
                 # The roles are (about to start) loading: focus the list when they arrive.
                 self._focus_entra_on_load = True
@@ -172,6 +269,8 @@ class ScopeScreen(VimNavMixin, FomoScreen):
     def on_tab_activated(self, event: TabbedContent.TabActivated) -> None:
         if event.pane.id == "tab-entra" and not self._entra_loaded and not self._entra_loading:
             self._start_entra_load()
+        # The footer: the Recent tab has no filter, selection or sort.
+        self.refresh_bindings()
 
     def watch_focused(self, focused) -> None:
         try:
@@ -343,6 +442,7 @@ class ScopeScreen(VimNavMixin, FomoScreen):
         self.query_one("#entra-spinner").display = False
         if not roles:
             self.query_one("#entra-loading-label", Label).update("[dim]No eligible Entra roles found.[/dim]")
+            self._start_pending_entra_recent()
             return
         self.query_one("#entra-loading-area").display = False
         self.query_one("#entra-split").display = True
@@ -354,10 +454,12 @@ class ScopeScreen(VimNavMixin, FomoScreen):
         ):
             self.query_one("#entra-role-list").focus()
         self._update_entra_status()
+        self._start_pending_entra_recent()
 
     def _on_entra_error(self, msg: str) -> None:
         self._entra_loading = False
         self._focus_entra_on_load = False
+        self._entra_recent = None
         self.query_one("#entra-spinner").display = False
         body: str | Content
         if azure.is_auth_error(msg):
@@ -491,6 +593,84 @@ class ScopeScreen(VimNavMixin, FomoScreen):
         self._update_entra_status()
 
     # ------------------------------------------------------------------
+    # Recent activations (Recent tab, keys 1-5)
+    # ------------------------------------------------------------------
+
+    def _show_recents(self) -> None:
+        """List the recent activations on the Recent tab, if it is there and they have changed."""
+        recents = self.app.recents.entries()  # type: ignore[attr-defined]
+        if recents == self._recents or not self.query("#recent-list"):
+            return
+        self._recents = recents
+        recent_list = self.query_one("#recent-list", OptionList)
+        recent_list.set_options(recent_prompt(number, recent) for number, recent in enumerate(recents, 1))
+        recent_list.highlighted = 0
+        keys = "[bold]1[/bold]" if len(recents) == 1 else f"[bold]1[/bold]–[bold]{len(recents)}[/bold]"
+        self.query_one("#recent-hint", Label).update(
+            f"Press {keys} (also on the other tabs) or [bold]⏎[/bold] to activate the same roles again.  "
+            "The reason and duration are filled in, and you can change them first."
+        )
+        self.refresh_bindings()
+
+    @on(OptionList.OptionSelected, "#recent-list")
+    def on_recent_selected(self, event: OptionList.OptionSelected) -> None:
+        """A click on a recent activation (Enter is the proceed binding)."""
+        self.action_start_recent(event.option_index)
+
+    def action_start_recent(self, index: int) -> None:
+        """1-5: start recent activation *index* (from 0), with its reason and duration.
+
+        Azure: open the roles screen for its subscriptions, which selects the
+        roles and, if they can all be activated, goes on to the activation
+        screen.  Entra: the same on the Entra tab, once its roles have loaded.
+        """
+        recents = self._recents or []
+        if not 0 <= index < len(recents):
+            self.notify(f"There is no recent activation {index + 1}.", severity="warning")
+            return
+        recent = recents[index]
+        if recent.kind == "entra":
+            self._start_entra_recent(recent)
+            return
+        from fomo.screens.roles_screen import RolesScreen
+
+        names = {sub.id: sub.name for sub in self._all_subs}
+        self.app.push_screen(RolesScreen(list(recent.subscriptions), names, recent=recent))
+
+    def _start_entra_recent(self, recent: state.Recent) -> None:
+        self._entra_recent = recent
+        if self._active_tab() != "tab-entra":
+            self._switch_tab("tab-entra")  # loads the roles the first time
+        elif not self._entra_loaded and not self._entra_loading:
+            self._start_entra_load()  # the last load failed
+        if self._entra_loaded:
+            self._start_pending_entra_recent()
+
+    def _start_pending_entra_recent(self) -> None:
+        """Select the roles of the recent Entra activation waiting for the roles, if any.
+
+        If they can all be activated, open the activation screen; otherwise a
+        toast names the others.
+        """
+        recent, self._entra_recent = self._entra_recent, None
+        if recent is None:
+            return
+        self._entra_prefill = {"justification": recent.justification, "duration": recent.duration}
+        match = state.match_targets(recent, self.all_roles, state.entra_target)
+        if self.all_roles:
+            self._selected = set(match.ready)
+            self._rebuild_entra_list(self.query_one("#entra-filter", Input).value)
+            self._update_entra_status()
+        # Not when another screen (a dialog) has come up meanwhile.
+        if match.complete and self.app.screen is self:
+            self._open_entra_activation([self.all_roles[i] for i in sorted(match.ready)])
+            return
+        if self.all_roles:
+            self.query_one("#entra-role-list").focus()
+        if not match.complete:
+            self.notify(match.problems(), title="Recent activation", severity="warning", timeout=10, markup=False)
+
+    # ------------------------------------------------------------------
     # Actions — tab-aware
     # ------------------------------------------------------------------
 
@@ -504,6 +684,10 @@ class ScopeScreen(VimNavMixin, FomoScreen):
             return self._filter_has_focus()
         if action == "proceed":
             return not self._filter_has_focus()
+        if action == "start_recent":
+            return bool(self._recents)
+        if action in _NOT_ON_RECENT_TAB and self._on_recent_tab():
+            return False
         return super().check_action(action, parameters)
 
     def action_to_list(self) -> None:
@@ -517,7 +701,9 @@ class ScopeScreen(VimNavMixin, FomoScreen):
             self.query_one("#filter").focus()
 
     def action_focus_list(self) -> None:
-        if self._active_tab() == "tab-entra":
+        if self._active_tab() == "tab-recent":
+            self.query_one("#recent-list").focus()
+        elif self._active_tab() == "tab-entra":
             self.query_one("#entra-role-list").focus()
         else:
             self.query_one("#sub-list").focus()
@@ -553,6 +739,13 @@ class ScopeScreen(VimNavMixin, FomoScreen):
             self.query_one("#sub-list", SelectionList).deselect_all()
 
     def action_proceed(self) -> None:
+        if self._active_tab() == "tab-recent":
+            recent_list = self.query_one("#recent-list", OptionList)
+            if self.focused is not recent_list:
+                recent_list.focus()
+            elif recent_list.highlighted is not None:
+                self.action_start_recent(recent_list.highlighted)
+            return
         if isinstance(self.focused, Tabs):
             self.action_focus_filter()
             return
@@ -561,22 +754,7 @@ class ScopeScreen(VimNavMixin, FomoScreen):
             if not selected_roles:
                 self.notify("Select at least one role.", severity="warning")
                 return
-            high_risk = [
-                t
-                for r in selected_roles
-                if (t := tiering.get_entra_tier(r.role_definition_id)) is not None and t["tier"] <= 1
-            ]
-            if high_risk:
-                summary = tiering.high_risk_summary(high_risk)
-                self.notify(
-                    f"Blast-radius warning: {len(high_risk)} high-risk role(s) selected\n{summary}",
-                    severity="warning",
-                    timeout=15,
-                    markup=False,
-                )
-            from fomo.screens.entra_screen import EntraActivationScreen
-
-            self.app.push_screen(EntraActivationScreen(selected_roles), self._after_entra_activation)
+            self._open_entra_activation(selected_roles)
         else:
             selected_ids: list[str] = list(self._selected_ids)
             if not selected_ids:
@@ -587,6 +765,26 @@ class ScopeScreen(VimNavMixin, FomoScreen):
             names = {sub.id: sub.name for sub in self._all_subs}
             self.app.push_screen(RolesScreen(selected_ids, names))
 
+    def _open_entra_activation(self, selected_roles: list[azure.EntraEligibleRole]) -> None:
+        """Warn about high-risk roles, then open the Entra activation screen for *selected_roles*."""
+        high_risk = [
+            t
+            for r in selected_roles
+            if (t := tiering.get_entra_tier(r.role_definition_id)) is not None and t["tier"] <= 1
+        ]
+        if high_risk:
+            summary = tiering.high_risk_summary(high_risk)
+            self.notify(
+                f"Blast-radius warning: {len(high_risk)} high-risk role(s) selected\n{summary}",
+                severity="warning",
+                timeout=15,
+                markup=False,
+            )
+        from fomo.screens.entra_screen import EntraActivationScreen
+
+        screen = EntraActivationScreen(selected_roles, **self._entra_prefill)
+        self.app.push_screen(screen, self._after_entra_activation)
+
     def _after_entra_activation(self, result: ActivationResult[azure.EntraEligibleRole] | None) -> None:
         """Back on the Entra tab from the Entra activation screen (Done or Escape).
 
@@ -595,6 +793,8 @@ class ScopeScreen(VimNavMixin, FomoScreen):
         """
         if result is None or not self.is_attached:
             return
+        # A recent activation's reason and duration were for that run only.
+        self._entra_prefill = {}
         activated = {(role.role_definition_id, role.directory_scope_id) for role in result.activated}
         for role in self.all_roles:
             if (role.role_definition_id, role.directory_scope_id) in activated:
