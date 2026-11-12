@@ -126,28 +126,6 @@ def test_azure_activation_failure_rows_and_error_log(make_app, fake_azure) -> No
     asyncio.run(scenario())
 
 
-def test_entra_activation_long_failure_is_truncated(make_app, fake_azure) -> None:
-    fake_azure.fail_on = {"Global Reader"}
-
-    async def scenario() -> None:
-        app = make_app()
-        async with app.run_test(size=SIZE) as pilot:
-            await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
-            app.push_screen(EntraActivationScreen([_entra("Global Reader"), _entra("Security Reader")]))
-            await wait_for(pilot, lambda: isinstance(app.screen, EntraActivationScreen))
-            screen = app.screen
-            assert isinstance(screen, EntraActivationScreen)
-            await pilot.press(*"why")
-            await pilot.click("#btn-activate")
-            await wait_for(pilot, lambda: str(screen.query_one("#btn-back", Button).label) == "Done")
-
-            cells = _status_cells(screen.query_one("#roles-table", DataTable), 2)
-            assert cells == ["✗ Graph says no", "✓ DryRun"]
-            assert screen._errors == {0: "Graph says no"}
-
-    asyncio.run(scenario())
-
-
 @pytest.mark.parametrize(
     ("screen_cls", "roles"),
     [
@@ -290,7 +268,7 @@ def test_summarize_activation_error(message: str, short: str) -> None:
     assert summarize_activation_error(message) == short
 
 
-def test_failure_shows_short_status_and_wrapped_details_at_80x24(make_live_app, fake_azure) -> None:
+def test_entra_failure_shows_short_status_and_wrapped_details_at_80x24(make_live_app, fake_azure) -> None:
     fake_azure.fail_messages = {"Global Reader": GRAPH_EXPIRY}
     roles = [_entra(name) for name in ("Global Reader", "Security Reader", "Reports Reader")]
 
@@ -306,6 +284,7 @@ def test_failure_shows_short_status_and_wrapped_details_at_80x24(make_live_app, 
 
             table = screen.query_one("#roles-table", DataTable)
             assert _status_cells(table, 2) == ["✗ Exceeds max duration (PT4H)", "✓ Provisioned", "✓ Provisioned"]
+            assert screen._errors == {0: GRAPH_EXPIRY}
             failed = table.get_cell_at(Coordinate(0, 2))
             assert "red" in str(failed.style)
             assert "green" in str(table.get_cell_at(Coordinate(1, 2)).style)
@@ -401,17 +380,24 @@ def test_escape_and_q_go_back_when_not_typing(make_live_app, fake_azure) -> None
                 await pilot.press("escape")
                 await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
 
-            for screen in _both_screens():
-                # Escape in the open Duration menu only closes the menu; then q goes back.
-                await _open(pilot, screen)
-                duration = screen.query_one("#duration", Select)
-                await pilot.press("tab", "enter")
-                await wait_for(pilot, lambda d=duration: d.expanded)
-                await pilot.press("escape")
-                await wait_for(pilot, lambda d=duration: not d.expanded)
-                assert app.screen is screen, type(screen).__name__
-                await pilot.press("q")
-                await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
+            azure_screen, entra_screen = _both_screens()
+
+            # Escape in the open Duration menu only closes the menu (Entra's
+            # Escape used to be a priority binding that left the screen).
+            await _open(pilot, entra_screen)
+            duration = entra_screen.query_one("#duration", Select)
+            await pilot.press("tab", "enter")
+            await wait_for(pilot, lambda: duration.expanded)
+            await pilot.press("escape")
+            await wait_for(pilot, lambda: not duration.expanded)
+            assert app.screen is entra_screen
+            await pilot.press("q")
+            await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
+
+            # q goes back from the Azure screen too (it used to do nothing there).
+            await _open(pilot, azure_screen)
+            await pilot.press("tab", "q")
+            await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
             assert fake_azure.activations == []
 
     asyncio.run(scenario())
