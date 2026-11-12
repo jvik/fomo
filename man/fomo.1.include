@@ -70,7 +70,7 @@ Roles in a high blast-radius tier (Tier\~0 or Tier\~1) also trigger a warning.
 .TP
 .B Step\~3\ \(em\ Confirm and activate
 Enter a justification (required by Azure PIM), choose an activation duration,
-and press the \fBActivate\fR button.
+and press \fBEnter\fR or the \fBActivate\fR button.
 Each role's activation status is shown in a live table.
 Global (management-group-scoped) roles are highlighted separately because
 they remain active across all subscriptions under that scope.
@@ -166,7 +166,11 @@ Return to the subscription screen.
 .SS Activation screens (Azure and Entra)
 .TP
 .B Enter
-In the justification field, move to the duration selector.
+In the reason (justification) field, activate the roles.
+With an empty reason, show a warning instead.
+.TP
+.B Tab
+Move from the reason field to the duration selector.
 .TP
 .B Escape
 Return to the role selection screen.

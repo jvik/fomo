@@ -1,8 +1,10 @@
-"""Characterization tests for the Azure and Entra activation screens.
+"""Tests for the Azure and Entra activation screens.
 
-They pin the behaviour shared through ``ActivationScreenBase`` (failure rows,
-error log, error bookkeeping across the sub/global tables) and the Escape
-differences that are intentionally kept for now.
+They cover the behaviour shared through ``ActivationScreenBase``: failure rows,
+the error log, error bookkeeping across the sub/global tables, the layout on
+small terminals (F07) and the keys of the reason field.  The layout and key
+tests run against the fake Azure boundary with ``dry_run=False``, so the fake
+``activate_role`` records real (fake) activations.
 """
 
 from __future__ import annotations
@@ -12,18 +14,23 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from textual.pilot import Pilot
+from textual.screen import Screen
 from textual.widgets import Button, DataTable, Input, RichLog, Select
 
 from fomo import app as app_module
 from fomo.app import PimApp
 from fomo.azure import EligibleRole, EntraEligibleRole
+from fomo.screens._activation_base import fit_column_widths
 from fomo.screens.activation_screen import ActivationScreen
 from fomo.screens.entra_screen import EntraActivationScreen
 from fomo.screens.scope_screen import ScopeScreen
+from tests.test_tui_markup import _rendered, _toasts
 from tests.test_tui_smoke import SIZE, _status_cells, wait_for
 
 SUB = "/subscriptions/11111111-1111-1111-1111-111111111111"
 MG = "/providers/Microsoft.Management/managementGroups/root"
+LONG_SCOPE = "rg-platform-networking-prod-westeurope"
 
 
 @pytest.fixture
@@ -40,12 +47,53 @@ def make_app(monkeypatch: pytest.MonkeyPatch) -> Callable[..., PimApp]:
     return _make
 
 
-def _arm(name: str, scope: str) -> EligibleRole:
-    return EligibleRole(name, f"{scope}/providers/x/roleDefinitions/{name}", scope, "disp", "u", "s", None)
+@pytest.fixture
+def make_live_app(monkeypatch: pytest.MonkeyPatch, fake_azure: Any) -> Callable[[], PimApp]:
+    """PimApp on the fake Azure boundary with dry run off, animations off."""
+    monkeypatch.setattr(app_module, "_system_is_dark", lambda: True)
+    monkeypatch.setattr(PimApp, "_watch_color_scheme", lambda self: None)
+
+    def _make() -> PimApp:
+        app = PimApp(demo_mode=False, dry_run=False)
+        app.animation_level = "none"
+        return app
+
+    return _make
+
+
+def _arm(name: str, scope: str, disp: str = "disp") -> EligibleRole:
+    return EligibleRole(name, f"{scope}/providers/x/roleDefinitions/{name}", scope, disp, "u", "s", None)
 
 
 def _entra(name: str) -> EntraEligibleRole:
     return EntraEligibleRole(name, name.lower(), "u", "s", None)
+
+
+FIVE_ROLES = [
+    _arm(name, SUB, LONG_SCOPE)
+    for name in ("Owner", "Storage Blob Data Contributor", "Contributor", "Key Vault Administrator", "Reader")
+]
+
+
+async def _open(pilot: Pilot, screen: Screen) -> None:
+    """Push *screen* over the scope screen and wait until the reason field has focus."""
+    app = pilot.app
+    await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
+    await app.push_screen(screen)
+    await wait_for(pilot, lambda: isinstance(app.focused, Input))
+
+
+async def _wait_done(pilot: Pilot, screen: Screen) -> None:
+    await wait_for(pilot, lambda: str(screen.query_one("#btn-back", Button).label) == "Done")
+
+
+def _assert_fully_on_screen(screen: Screen, *selectors: str) -> None:
+    """Each widget is laid out, not clipped by its containers, and inside the screen."""
+    for selector in selectors:
+        geometry = screen.find_widget(screen.query_one(selector))
+        assert geometry.region.height > 0, selector
+        assert geometry.region.intersection(geometry.clip) == geometry.region, (selector, geometry)
+        assert screen.region.contains_region(geometry.region), (selector, geometry)
 
 
 def test_azure_activation_failure_rows_and_error_log(make_app, fake_azure) -> None:
@@ -145,9 +193,9 @@ def test_duration_can_never_be_blank(make_app, fake_azure, screen_cls, roles) ->
             assert Select.NULL not in [value for _, value in duration._options]
             assert duration.value == "PT1H"
 
-            # Keyboard: Enter in the justification focuses the duration.  Open
+            # Keyboard: Tab in the justification focuses the duration.  Open
             # the menu and pick its top row, where the blank row used to be.
-            await pilot.press(*"why", "enter")
+            await pilot.press(*"why", "tab")
             await wait_for(pilot, lambda: app.focused is duration)
             await pilot.press("enter")
             await wait_for(pilot, lambda: duration.expanded)
@@ -159,5 +207,100 @@ def test_duration_can_never_be_blank(make_app, fake_azure, screen_cls, roles) ->
             await pilot.click("#btn-activate")
             await wait_for(pilot, lambda: str(screen.query_one("#btn-back", Button).label) == "Done")
             assert [d for _, _, d, _ in fake_azure.activations] == ["PT30M"]
+
+    asyncio.run(scenario())
+
+
+# ---------------------------------------------------------------------------
+# Layout on small terminals (F07)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("available", "natural", "expected"),
+    [
+        # Room to spare: nothing shrinks and Status takes the rest.
+        (100, [29, 38, 4, 17], [29, 38, 4, 29]),
+        # Scope gives way first, down to its minimum.
+        (60, [29, 38, 4, 17], [29, 10, 4, 17]),
+        # Then Role.
+        (50, [29, 38, 4, 17], [19, 10, 4, 17]),
+        # Then Status is cut, but never below one cell.
+        (40, [29, 38, 4, 17], [16, 10, 4, 10]),
+        (20, [29, 38, 4, 17], [16, 10, 4, 1]),
+    ],
+)
+def test_fit_column_widths(available: int, natural: list[int], expected: list[int]) -> None:
+    assert fit_column_widths(available, natural, ((1, 10), (0, 16))) == expected
+
+
+def test_form_stays_on_screen_at_80x24_and_duration_keeps_its_height(make_live_app, fake_azure) -> None:
+    fake_azure.fail_on = {"Owner", "Contributor"}
+
+    async def scenario() -> None:
+        app = make_live_app()
+        async with app.run_test(size=(80, 24)) as pilot:
+            screen = ActivationScreen(FIVE_ROLES)
+            await _open(pilot, screen)
+            await pilot.pause()
+            _assert_fully_on_screen(screen, "#justification", "#duration", "#btn-activate", "#btn-back")
+
+            screen.query_one("#justification", Input).value = "why"
+            await pilot.click("#btn-activate")
+            await _wait_done(pilot, screen)
+            await pilot.pause()
+            assert [name for name, *_ in fake_azure.activations] == [r.role_name for r in FIVE_ROLES]
+            assert not screen.query_one("#error-log").has_class("hidden")
+            _assert_fully_on_screen(screen, "#justification", "#duration", "#error-log", "#btn-activate", "#btn-back")
+
+            # Status stays in view: the table never scrolls sideways, Scope gives way with "…".
+            table = screen.query_one("#roles-table", DataTable)
+            assert table.virtual_size.width <= table.scrollable_content_region.width
+            rendered = _rendered(table)
+            assert "Status" in rendered
+            assert "✓ Provisioned" in rendered
+            assert LONG_SCOPE not in rendered
+            assert LONG_SCOPE[:8] in rendered
+            assert "…" in rendered
+
+            await pilot.resize_terminal(120, 36)
+            await wait_for(pilot, lambda: screen.size.width == 120)
+            await pilot.pause()
+            _assert_fully_on_screen(screen, "#justification", "#duration", "#error-log", "#btn-activate")
+            assert screen.query_one("#duration").region.height >= 3
+
+    asyncio.run(scenario())
+
+
+# ---------------------------------------------------------------------------
+# Keys in the reason field
+# ---------------------------------------------------------------------------
+
+
+def test_enter_in_reason_activates_unless_it_is_blank(make_live_app, fake_azure) -> None:
+    async def scenario() -> None:
+        app = make_live_app()
+        async with app.run_test(size=SIZE, notifications=True) as pilot:
+            screen = ActivationScreen([_arm("Reader", SUB)])
+            await _open(pilot, screen)
+            reason = screen.query_one("#justification", Input)
+
+            # A blank (whitespace-only) reason only warns.
+            await pilot.press("space", "enter")
+            await wait_for(pilot, lambda: "Justification is required." in _toasts(app))
+            assert fake_azure.activations == []
+            assert app.focused is reason
+            assert not screen.query_one("#btn-activate", Button).disabled
+
+            await pilot.press("x", "enter")
+            await _wait_done(pilot, screen)
+            assert fake_azure.activations == [("Reader", SUB, "PT1H", False)]
+            assert fake_azure.justifications == ["x"]
+
+            # Once the run is over, Enter in the reason doesn't submit again.
+            reason.focus()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert len(fake_azure.activations) == 1
 
     asyncio.run(scenario())

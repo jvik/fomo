@@ -131,7 +131,7 @@ SelectionList > .selection-list--button-selected-highlighted {
     height: auto;
 }
 
-/* Activation screen */
+/* Tables (activation and assignments screens) */
 DataTable {
     height: auto;
     max-height: 14;
@@ -139,43 +139,80 @@ DataTable {
     margin-bottom: 1;
 }
 
-#form Label {
-    margin-top: 1;
+/* Activation screens, top to bottom: title, reason + duration, the role
+   tables (the only part that grows and scrolls), error details, buttons.
+   The form stays on screen at 80x24 even after failures. */
+#activation {
+    padding: 1 2 0 2;
+    height: 1fr;
+}
+
+#title {
+    height: 1;
+}
+
+#form {
+    height: 3;
+}
+
+#form .form-label {
+    height: 3;
+    content-align: left middle;
     color: $text-muted;
+    margin-right: 1;
+}
+
+#justification {
+    width: 1fr;
+}
+
+#duration-label {
+    margin-left: 2;
+}
+
+#duration {
+    width: 18;
+}
+
+#roles-scroll {
+    height: 1fr;
+}
+
+/* Full height (DataTable's default max-height is 100%): #roles-scroll does
+   the scrolling.  The columns always fit, so no horizontal scrollbar. */
+#roles-scroll DataTable {
+    max-height: 999;
+    overflow-x: hidden;
+    margin-bottom: 0;
+}
+
+/* Global assignments warning box */
+#global-roles-box {
+    height: auto;
+    border: round $warning;
+    padding: 0 1;
+}
+
+#global-roles-box Label {
+    color: $text;
+}
+
+/* Error details panel (shown only after activation errors) */
+#error-log {
+    height: auto;
+    max-height: 8;
+    border: round $error;
+    border-title-color: $error;
+    background: $surface-darken-1;
 }
 
 #buttons {
     height: 3;
-    margin-top: 1;
     align: left middle;
 }
 
 #btn-activate {
     margin-right: 2;
-}
-
-/* Global assignments warning box */
-#global-roles-box {
-    border: round $warning;
-    padding: 0 1;
-    margin-bottom: 1;
-}
-
-#global-roles-box Label {
-    margin: 1 0;
-    color: $text;
-}
-
-#global-roles-box DataTable {
-    margin-bottom: 0;
-}
-
-/* Error log panel (shown only on activation errors) */
-#error-log {
-    height: 10;
-    border: round $error;
-    margin-top: 1;
-    background: $surface-darken-1;
 }
 
 /* Scope screen tabs */

@@ -8,11 +8,9 @@ from collections.abc import Sequence
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
-from textual.widgets import DataTable, Footer, Header, Label
 
-from fomo import azure
-from fomo.screens._activation_base import ActivationScreenBase
+from fomo import azure, tiering
+from fomo.screens._activation_base import ActivationScreenBase, RoleTable, table_cell, tier_cell, title_markup
 
 log = logging.getLogger(__name__)
 
@@ -25,32 +23,22 @@ class EntraActivationScreen(ActivationScreenBase[azure.EntraEligibleRole]):
         Binding("q", "back", "Back", show=False),
     ]
 
-    STATUS_COLUMN = 2
+    COLUMNS = ("Role", "Tier")
     _log = log
     _FAILURE_LOG_MESSAGE = "Entra activation failed for %s: %s"
 
-    def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
-        with Vertical(id="main"):
-            yield Label(
-                f"Activating [bold]{len(self.roles)}[/bold] Entra role(s):",
-                id="title",
-            )
-            yield DataTable(id="roles-table", show_cursor=False)
-            yield from self._compose_form()
-        yield Footer()
+    def _title(self) -> str:
+        return title_markup(len(self.roles), "Entra role")
 
-    def on_mount(self) -> None:
-        table = self.query_one("#roles-table", DataTable)
-        table.add_column("Role")
-        table.add_column("Expires")
-        table.add_column("Status", width=36)
-        for role in self.roles:
-            table.add_row(Text(role.role_name), Text(azure.format_expiry(role.expiry)), "—")
-        self.query_one("#justification").focus()
+    def _compose_tables(self) -> ComposeResult:
+        # At narrow widths the role name gives up room before Status does.
+        yield RoleTable(id="roles-table", shrink=((0, 16),))
 
     def _role_tables(self) -> Sequence[tuple[str, Sequence[azure.EntraEligibleRole]]]:
         return [("roles-table", self.roles)]
+
+    def _row_cells(self, role: azure.EntraEligibleRole) -> Sequence[Text]:
+        return (table_cell(role.role_name), tier_cell(tiering.get_entra_tier(role.role_definition_id)))
 
     def _activate(self, role: azure.EntraEligibleRole, justification: str, duration: str) -> str:
         result = self.app.backend.activate_entra_role(role, justification, duration)  # type: ignore[attr-defined]
