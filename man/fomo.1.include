@@ -177,12 +177,14 @@ Move from the reason field to the duration selector.
 .TP
 .B Escape
 Return to the role selection screen.
-On the Azure activation screen, the first \fBEscape\fR only leaves the
-justification field.
+If the reason field has focus and contains text, the first \fBEscape\fR
+only leaves the field and keeps the text; press it again to go back.
+With the duration menu open, \fBEscape\fR closes the menu.
 Going back is not possible while an activation is running.
 .TP
 .B q
-Return to the previous screen (Entra activation screen only).
+Return to the role selection screen, like \fBEscape\fR, when you are not
+typing in the reason field.
 .SS Assignments screen
 .TP
 .BR 1 \ /\  2 \ /\  3 \ /\  4

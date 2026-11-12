@@ -7,7 +7,6 @@ from collections.abc import Sequence
 
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.binding import Binding
 
 from fomo import azure, tiering
 from fomo.screens._activation_base import ActivationScreenBase, RoleTable, table_cell, tier_cell, title_markup
@@ -17,11 +16,6 @@ log = logging.getLogger(__name__)
 
 class EntraActivationScreen(ActivationScreenBase[azure.EntraEligibleRole]):
     """Fill in justification + duration, then activate selected Entra roles."""
-
-    BINDINGS = [
-        Binding("escape", "back", "Back", show=True, priority=True),
-        Binding("q", "back", "Back", show=False),
-    ]
 
     COLUMNS = ("Role", "Tier")
     _log = log
@@ -43,7 +37,3 @@ class EntraActivationScreen(ActivationScreenBase[azure.EntraEligibleRole]):
     def _activate(self, role: azure.EntraEligibleRole, justification: str, duration: str) -> str:
         result = self.app.backend.activate_entra_role(role, justification, duration)  # type: ignore[attr-defined]
         return result.get("status", "Submitted")
-
-    def action_back(self) -> None:
-        if not self._activating:
-            self.app.pop_screen()

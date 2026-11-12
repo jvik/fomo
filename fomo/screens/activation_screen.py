@@ -7,9 +7,8 @@ from collections.abc import Sequence
 
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Vertical
-from textual.widgets import Input, Label
+from textual.widgets import Label
 
 from fomo import azure, tiering
 from fomo.screens._activation_base import ActivationScreenBase, RoleTable, table_cell, tier_cell, title_markup
@@ -22,10 +21,6 @@ _SHRINK = ((1, 10), (0, 16))
 
 class ActivationScreen(ActivationScreenBase[azure.EligibleRole]):
     """Fill in justification + duration, then activate selected roles."""
-
-    BINDINGS = [
-        Binding("escape", "back", "Back", show=True),
-    ]
 
     COLUMNS = ("Role", "Scope", "Tier")
     _log = log
@@ -67,11 +62,3 @@ class ActivationScreen(ActivationScreenBase[azure.EligibleRole]):
     def _activate(self, role: azure.EligibleRole, justification: str, duration: str) -> str:
         result = self.app.backend.activate_role(role, justification, duration)  # type: ignore[attr-defined]
         return result.get("properties", {}).get("status", "Submitted")
-
-    def action_back(self) -> None:
-        if isinstance(self.focused, Input):
-            # First Esc: blur the input, keep text intact
-            self.focused.blur()
-            return
-        if not self._activating:
-            self.app.pop_screen()

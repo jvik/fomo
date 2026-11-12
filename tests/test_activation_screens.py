@@ -148,29 +148,6 @@ def test_entra_activation_long_failure_is_truncated(make_app, fake_azure) -> Non
     asyncio.run(scenario())
 
 
-def test_azure_escape_blurs_input_first_entra_escape_pops(make_app) -> None:
-    async def scenario() -> None:
-        app = make_app()
-        async with app.run_test(size=SIZE) as pilot:
-            await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
-
-            app.push_screen(ActivationScreen([_arm("Reader", SUB)]))
-            await wait_for(pilot, lambda: isinstance(app.focused, Input))
-            await pilot.press("escape")
-            await pilot.pause()
-            assert isinstance(app.screen, ActivationScreen)
-            assert not isinstance(app.focused, Input)
-            await pilot.press("escape")
-            await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
-
-            app.push_screen(EntraActivationScreen([_entra("Global Reader")]))
-            await wait_for(pilot, lambda: isinstance(app.focused, Input))
-            await pilot.press("escape")
-            await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
-
-    asyncio.run(scenario())
-
-
 @pytest.mark.parametrize(
     ("screen_cls", "roles"),
     [
@@ -378,5 +355,63 @@ def test_enter_in_reason_activates_unless_it_is_blank(make_live_app, fake_azure)
             await pilot.press("enter")
             await pilot.pause()
             assert len(fake_azure.activations) == 1
+
+    asyncio.run(scenario())
+
+
+# ---------------------------------------------------------------------------
+# Escape and q (F32): the same rule on both screens
+# ---------------------------------------------------------------------------
+
+
+def _both_screens() -> list[Screen]:
+    return [ActivationScreen([_arm("Reader", SUB)]), EntraActivationScreen([_entra("Global Reader")])]
+
+
+def test_escape_leaves_a_filled_reason_first_then_goes_back(make_live_app, fake_azure) -> None:
+    async def scenario() -> None:
+        app = make_live_app()
+        async with app.run_test(size=SIZE) as pilot:
+            for screen in _both_screens():
+                await _open(pilot, screen)
+                reason = screen.query_one("#justification", Input)
+                await pilot.press("q")  # typed into the reason, not Back
+                assert reason.value == "q"
+                assert app.screen is screen
+
+                await pilot.press("escape")
+                assert app.screen is screen, type(screen).__name__
+                assert not isinstance(app.focused, Input)
+                assert reason.value == "q"
+
+                await pilot.press("escape")
+                await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
+            assert fake_azure.activations == []
+
+    asyncio.run(scenario())
+
+
+def test_escape_and_q_go_back_when_not_typing(make_live_app, fake_azure) -> None:
+    async def scenario() -> None:
+        app = make_live_app()
+        async with app.run_test(size=SIZE) as pilot:
+            for screen in _both_screens():
+                # An empty reason: Escape goes straight back.
+                await _open(pilot, screen)
+                await pilot.press("escape")
+                await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
+
+            for screen in _both_screens():
+                # Escape in the open Duration menu only closes the menu; then q goes back.
+                await _open(pilot, screen)
+                duration = screen.query_one("#duration", Select)
+                await pilot.press("tab", "enter")
+                await wait_for(pilot, lambda d=duration: d.expanded)
+                await pilot.press("escape")
+                await wait_for(pilot, lambda d=duration: not d.expanded)
+                assert app.screen is screen, type(screen).__name__
+                await pilot.press("q")
+                await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
+            assert fake_azure.activations == []
 
     asyncio.run(scenario())

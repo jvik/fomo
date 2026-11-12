@@ -18,6 +18,7 @@ from rich.cells import cell_len
 from rich.text import Text
 from textual import on, work
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.coordinate import Coordinate
 from textual.events import Resize
@@ -170,6 +171,13 @@ class RoleTable(DataTable):
 class ActivationScreenBase(Screen, Generic[RoleT]):
     """Justification form plus per-role activation progress."""
 
+    # Not priority bindings: a focused Input types "q", and an open Duration
+    # menu closes on Escape before the screen sees it.
+    BINDINGS = [
+        Binding("escape", "back", "Back", show=True),
+        Binding("q", "back", "Back", show=False),
+    ]
+
     # Labels of the columns before Status.
     COLUMNS: ClassVar[tuple[str, ...]]
     # Logger and message used when an activation fails.
@@ -284,7 +292,18 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
         self._run_activation(justification, duration)
 
     def action_back(self) -> None:
-        raise NotImplementedError
+        """Escape, q and the Back button.
+
+        In a focused Input that has text, only leave the field and keep the
+        text; the next Escape goes back.  Otherwise go back, unless an
+        activation is running.
+        """
+        focused = self.focused
+        if isinstance(focused, Input) and focused.value:
+            self.set_focus(None)
+            return
+        if not self._activating:
+            self.app.pop_screen()
 
     # ------------------------------------------------------------------
     # Background activation worker
