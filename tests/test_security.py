@@ -225,3 +225,107 @@ def test_existing_log_file_keeps_its_mode(run_cli: Callable[[list[str]], Any], t
     assert code == 2
     assert _mode(path) == 0o644
     assert path.read_text().startswith("earlier run\n")
+
+
+# ---------------------------------------------------------------------------
+# Graph token cache
+# ---------------------------------------------------------------------------
+
+TOKENS = {"access_token": "AT", "refresh_token": "RT", "expires_in": 3600, "id_token": "not cached"}
+
+
+@pytest.fixture
+def cache_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    path = tmp_path / "home" / ".cache" / "fomo" / "graph_token.json"
+    monkeypatch.setattr(azure, "_TOKEN_CACHE_PATH", str(path))
+    return path
+
+
+@pytest.fixture
+def dump_modes(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Record the mode of the file ``json.dump`` writes the tokens into, at the time of writing."""
+    modes: list[int] = []
+    real_dump = json.dump
+
+    def _spy(obj: Any, fp: Any, *args: Any, **kwargs: Any) -> None:
+        modes.append(stat.S_IMODE(os.fstat(fp.fileno()).st_mode))
+        real_dump(obj, fp, *args, **kwargs)
+
+    monkeypatch.setattr(azure.json, "dump", _spy)
+    return modes
+
+
+def test_token_cache_is_private_from_the_start(cache_path: Path, dump_modes: list[int], umask_022: None) -> None:
+    azure._save_token_cache(TOKENS, "tenant-1")
+
+    assert dump_modes == [0o600]
+    assert _mode(cache_path) == 0o600
+    assert _mode(cache_path.parent) == 0o700
+    cached = azure._load_token_cache()
+    assert cached is not None
+    assert {k: cached[k] for k in ("access_token", "refresh_token", "expires_in", "tenant_id")} == {
+        "access_token": "AT",
+        "refresh_token": "RT",
+        "expires_in": 3600,
+        "tenant_id": "tenant-1",
+    }
+    assert "id_token" not in cached
+    assert os.listdir(cache_path.parent) == ["graph_token.json"]
+
+
+def test_token_cache_tightens_a_shared_cache_directory(cache_path: Path, umask_022: None) -> None:
+    # tiering.py may have created ~/.cache/fomo first, with the default mode.
+    cache_path.parent.mkdir(parents=True, mode=0o755)
+    assert _mode(cache_path.parent) == 0o755
+
+    azure._save_token_cache(TOKENS, "tenant-1")
+
+    assert _mode(cache_path.parent) == 0o700
+    assert _mode(cache_path.parent.parent) == 0o755  # only fomo's own directory
+
+
+def test_token_cache_replaces_an_existing_file(cache_path: Path, dump_modes: list[int], umask_022: None) -> None:
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text('{"refresh_token": "old"}')
+    cache_path.chmod(0o644)
+
+    azure._save_token_cache(TOKENS, "tenant-1")
+
+    assert dump_modes == [0o600]
+    assert _mode(cache_path) == 0o600
+    assert json.loads(cache_path.read_text())["refresh_token"] == "RT"
+
+
+def test_token_cache_does_not_follow_a_symlink(cache_path: Path, tmp_path: Path, umask_022: None) -> None:
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep me")
+    victim.chmod(0o644)
+    cache_path.parent.mkdir(parents=True)
+    cache_path.symlink_to(victim)
+
+    azure._save_token_cache(TOKENS, "tenant-1")
+
+    assert victim.read_text() == "keep me"
+    assert _mode(victim) == 0o644
+    assert not cache_path.is_symlink()
+    assert _mode(cache_path) == 0o600
+    assert json.loads(cache_path.read_text())["refresh_token"] == "RT"
+
+
+def test_token_cache_write_failure_keeps_the_old_cache(
+    cache_path: Path, monkeypatch: pytest.MonkeyPatch, umask_022: None
+) -> None:
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text('{"refresh_token": "old"}')
+
+    def _fail(obj: Any, fp: Any, *args: Any, **kwargs: Any) -> None:
+        fp.write('{"refresh_token": "half')
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(azure.json, "dump", _fail)
+
+    with pytest.raises(OSError, match="No space left"):
+        azure._save_token_cache(TOKENS, "tenant-1")
+
+    assert cache_path.read_text() == '{"refresh_token": "old"}'
+    assert os.listdir(cache_path.parent) == ["graph_token.json"]  # temp file removed
