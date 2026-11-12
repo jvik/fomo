@@ -8,11 +8,15 @@ dynamic = ["version"]
 description = "TUI for Azure PIM role activation with multiselect"
 requires-python = ">=3.11"
 dependencies = [
-    "textual>=0.70.0",
+    "textual>=8.2,<9",
 ]
 
 [dependency-groups]
-dev = ["pytest"]
+dev = [
+    "mypy>=2.4.1",
+    "pytest",
+    "ruff>=0.17.4",
+]
 
 [project.scripts]
 fomo = "fomo.__main__:main"
