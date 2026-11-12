@@ -8,7 +8,7 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - [x] 02a chore: lint/type tooling, CI, lockfile, untrack _version.py
 - [x] 02b refactor(cli): share logic across the three _cli_activate* functions
 - [x] 02c refactor(tui): de-duplicate screens, Backend, public imports
-- [ ] 02d docs: align README, man page and AGENTS.md with the code
+- [x] 02d docs: align README, man page and AGENTS.md with the code
 - [ ] 03a fix(tui): escape external text in markup
 - [ ] 03b fix(tui): tiering can never break role loading
 - [ ] 03c fix(security): --log redaction, token-cache permissions, Graph token lock
@@ -38,3 +38,4 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - 02a: ruff excludes `plan/`, and `ruff format` excludes the frozen `tests/test_cli_contract.py`. The existing narrow `# type: ignore[attr-defined]` on `self.app.dry_run`/`demo_mode` were kept as-is; a typed `PimApp` accessor fits 02c.
 - 02c: the demo branches in ScopeScreen's Entra load and both AssignmentsScreen loads sat outside the `try`; with the Backend they now share the live path's `try`, which only matters if demo data raised. `PimApp._load_account_info` and the title still branch on `demo_mode` (app, not a screen). Screens reach the backend via `self.app.backend  # type: ignore[attr-defined]`.
 - 02c: `tiering.ensure_*_loaded()` keeps the old "reload while the index is empty" semantics (a failed fetch is retried by the next caller), now serialised per index; 03b may want to cache the failure.
+- 02d: argparse-manpage isn't installed in .venv, so the new `[FILES]` include section was only checked in a hand-built roff page (renders cleanly, examples complete); the runner's build is the first real check of where it lands. The existing `Step 1 \(em …` WORKFLOW headings render as `Step 1 —— …` (pre-existing, left as is).

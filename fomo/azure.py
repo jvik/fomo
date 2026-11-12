@@ -302,7 +302,8 @@ def _list_active_role_keys(scope: str) -> frozenset[tuple[str, str]]:
 def list_eligible_roles(subscription_id: str) -> list[EligibleRole]:
     """List eligible PIM role assignments for the signed-in user in *subscription_id*.
 
-    Roles that are already active (PIM-activated) are excluded from the result.
+    Roles that are already active (PIM-activated) are included, with
+    ``is_active=True``.
     """
     scope = f"/subscriptions/{subscription_id}"
     url = (
