@@ -270,6 +270,9 @@ def test_buttons_bottom_right_and_tab_goes_from_duration_to_activate(make_live_a
                 await _open(pilot, screen)
                 await pilot.pause()
                 _assert_buttons_bottom_right(screen)
+                # The Duration label keeps its distance from the reason field.
+                reason = screen.query_one("#justification").region
+                assert screen.query_one("#duration-label").region.x - reason.right >= 2
                 assert not screen.query_one("#roles-scroll").focusable
                 assert _ids(screen) == ["justification", "duration", "btn-activate", "btn-back"]
 

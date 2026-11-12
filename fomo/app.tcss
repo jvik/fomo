@@ -271,8 +271,10 @@ DataTable {
     width: 1fr;
 }
 
-#duration-label {
-    margin-left: 2;
+/* All four edges: a partial margin-left would lose to the more specific
+   "#form .form-label" rule, whose margin-right resets the whole margin. */
+#form #duration-label {
+    margin: 0 1 0 2;
 }
 
 #duration {
