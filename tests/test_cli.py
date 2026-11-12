@@ -69,7 +69,8 @@ def test_parser_defaults_tui_mode() -> None:
     assert not args.entra
 
 
-def test_parser_cli_mode_role_only() -> None:
+def test_parser_accepts_single_positional_at_parse_level() -> None:
+    """argparse accepts one positional with -r; main() then rejects it (U1)."""
     args = build_parser().parse_args(["Key Vault Administrator", "-r", "Break-glass"])
     assert args.positional == ["Key Vault Administrator"]
     assert args.reason == "Break-glass"
