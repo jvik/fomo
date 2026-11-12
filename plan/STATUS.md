@@ -4,7 +4,7 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 
 ## Phases
 
-- [ ] 01 test: CLI characterization tests and Pilot smoke tests
+- [x] 01 test: CLI characterization tests and Pilot smoke tests
 - [ ] 02a chore: lint/type tooling, CI, lockfile, untrack _version.py
 - [ ] 02b refactor(cli): share logic across the three _cli_activate* functions
 - [ ] 02c refactor(tui): de-duplicate screens, Backend, public imports
@@ -30,3 +30,5 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 ## Blocked
 
 ## Notes
+
+- 01: REPORT.md §1 row E1 omits the first stdout line `Fetching Entra eligible roles…` (printed before the device-code block); test_E1 pins the real output. fake_azure also has `mg_roles_err` (M11) and `auth_err` (AuthErrorModal) toggles, and run_cli pins `COLUMNS=80` so the usage block is stable.
