@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+from collections.abc import Callable
 
-from textual import on
+from textual import events, on
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
@@ -15,6 +16,7 @@ from textual.worker import get_current_worker
 
 from fomo import azure
 from fomo.backend import Backend, make_backend
+from fomo.screens._common import safe_markup
 from fomo.screens.scope_screen import ScopeScreen
 
 FOMO_DARK = Theme(
@@ -48,47 +50,92 @@ FOMO_LIGHT = Theme(
 )
 
 
-class AuthErrorModal(ModalScreen):
-    """Persistent modal shown when the az CLI session has expired."""
+_RELOGIN_BODY = "Run [bold]az login[/bold] in another terminal, then press Retry."
+
+# Title and body markup for each kind of error that opens the dialog.
+_AUTH_ERROR_TEXT: dict[str, tuple[str, str]] = {
+    "expired": ("Azure session expired", _RELOGIN_BODY),
+    "not_logged_in": ("Not logged in to Azure", _RELOGIN_BODY),
+    "mfa": (
+        "MFA or compliant device required",
+        "Your tenant requires MFA or a compliant device for this request. "
+        "Run [bold]az login --scope https://management.azure.com/.default[/bold] "
+        "(or [bold]az login --tenant <id>[/bold]), then Retry.",
+    ),
+}
+
+# The raw error line is cut to this many characters so that the dialog,
+# wrapped at its 58-column text width, always fits an 80x24 terminal.
+_MESSAGE_LIMIT = 200
+
+
+def _first_line(message: str, limit: int = _MESSAGE_LIMIT) -> str:
+    """The first non-blank line of *message*, cut to *limit* characters."""
+    line = next((stripped for raw in message.splitlines() if (stripped := raw.strip())), "")
+    return line if len(line) <= limit else line[: limit - 1] + "…"
+
+
+class AuthErrorModal(ModalScreen[bool]):
+    """Dialog shown when the az CLI session can't be used.
+
+    *kind* (from ``azure.classify_auth_error``) picks the title and the fix to
+    suggest; the first line of the raw *message* is shown underneath.  The
+    screen dismisses with ``True`` for Retry and ``False`` for Dismiss; Quit
+    exits the app.  Open it with ``PimApp.show_auth_error``, which runs the
+    retry callbacks.
+    """
 
     BINDINGS = [
-        ("escape", "dismiss", "Dismiss"),
+        ("escape", "close", "Dismiss"),
+        ("r", "retry", "Retry"),
         ("q", "quit_app", "Quit"),
         ("ctrl+c", "quit_app", "Quit"),
     ]
 
+    _BUTTON_IDS = ("auth-error-retry", "auth-error-ok", "auth-error-quit")
+
+    def __init__(self, kind: azure.AuthErrorKind, message: str) -> None:
+        super().__init__()
+        self.kind = kind
+        self.message = message
+        #: Called, in order, when the user picks Retry.
+        self.retry_callbacks: list[Callable[[], None]] = []
+
     def compose(self) -> ComposeResult:
+        title, body = _AUTH_ERROR_TEXT.get(self.kind, _AUTH_ERROR_TEXT["expired"])
         with Vertical(id="auth-error-dialog"):
-            yield Label("Azure session expired", id="auth-error-title")
-            yield Label(
-                "Run [bold]az login[/bold] in your terminal, then restart fomo.",
-                id="auth-error-body",
-            )
+            yield Label(title, id="auth-error-title")
+            yield Label(body, id="auth-error-body")
+            line = _first_line(self.message)
+            if line:
+                yield Label(safe_markup("[dim]$line[/dim]", line=line), id="auth-error-message")
             with Horizontal(id="auth-error-buttons"):
+                yield Button("Retry", variant="primary", id="auth-error-retry")
                 yield Button("Dismiss", variant="default", id="auth-error-ok")
                 yield Button("Quit", variant="error", id="auth-error-quit")
 
     def on_mount(self) -> None:
-        self.query_one("#auth-error-ok").focus()
+        self.query_one("#auth-error-retry").focus()
 
-    def on_key(self, event) -> None:
+    def on_key(self, event: events.Key) -> None:
         if event.key in ("left", "right"):
-            focused = self.focused
-            if focused and focused.id == "auth-error-ok":
-                self.query_one("#auth-error-quit").focus()
-            else:
-                self.query_one("#auth-error-ok").focus()
+            ids = self._BUTTON_IDS
+            focused_id = self.focused.id if self.focused is not None else None
+            current = ids.index(focused_id) if focused_id in ids else 0
+            step = 1 if event.key == "right" else -1
+            self.query_one(f"#{ids[(current + step) % len(ids)]}").focus()
             event.stop()
 
-    @on(Button.Pressed, "#auth-error-ok")
-    def _ok(self) -> None:
-        self.dismiss()
+    @on(Button.Pressed, "#auth-error-retry")
+    def action_retry(self) -> None:
+        self.dismiss(True)
 
-    def action_quit_app(self) -> None:
-        self.app.exit()
+    @on(Button.Pressed, "#auth-error-ok")
+    def action_close(self) -> None:
+        self.dismiss(False)
 
     @on(Button.Pressed, "#auth-error-quit")
-    def _quit(self) -> None:
+    def action_quit_app(self) -> None:
         self.app.exit()
 
 
@@ -258,8 +305,42 @@ class PimApp(App):
             base = "fomo  ·  Azure PIM  [DRY RUN]" if self.dry_run else "fomo  ·  Azure PIM"
             self.call_from_thread(setattr, self, "title", f"{base}  ·  {user}  ·  {tenant}")
         except Exception as exc:
-            if azure.is_auth_error(str(exc)):
-                self.call_from_thread(self.push_screen, AuthErrorModal())
+            msg = str(exc)
+            kind = azure.classify_auth_error(msg)
+            if kind in ("expired", "not_logged_in", "mfa"):
+                self.call_from_thread(self.show_auth_error, kind, msg, self._retry_session)
+
+    def _retry_session(self) -> None:
+        """Retry after re-login: reload the account, and an empty subscription list.
+
+        A session that has no account yet can list zero subscriptions without
+        failing, so the scope screen would never ask to retry on its own.
+        """
+        self.run_worker(self._load_account_info, thread=True)
+        for screen in self.screen_stack:
+            if isinstance(screen, ScopeScreen) and not screen.has_subscriptions:
+                screen.reload_subscriptions()
+
+    def show_auth_error(self, kind: azure.AuthErrorKind, message: str, on_retry: Callable[[], None]) -> None:
+        """Open the AuthErrorModal; picking Retry calls *on_retry*.
+
+        A loader that fails while the dialog is already open (the account
+        check and the subscription list usually fail together) joins it
+        instead of stacking a second dialog, and Retry runs every callback.
+        """
+        for screen in self.screen_stack:
+            if isinstance(screen, AuthErrorModal):
+                screen.retry_callbacks.append(on_retry)
+                return
+        modal = AuthErrorModal(kind, message)
+        modal.retry_callbacks.append(on_retry)
+
+        def _closed(retry: bool | None) -> None:
+            if retry:
+                for callback in modal.retry_callbacks:
+                    callback()
+
+        self.push_screen(modal, _closed)
 
     def on_unmount(self) -> None:
         if self._color_scheme_proc is not None:

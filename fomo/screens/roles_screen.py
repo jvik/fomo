@@ -50,6 +50,7 @@ class RolesScreen(VimNavMixin, Screen):
         self._loaded_count = 0
         self._rebuilding = False
         self._auth_error_shown = False
+        self._auth_failed_subs: list[str] = []  # failed with an expired/missing session
         self._sort_mode = SORT_MODES[0]
 
     def compose(self) -> ComposeResult:
@@ -111,15 +112,31 @@ class RolesScreen(VimNavMixin, Screen):
         self._increment_loaded()
 
     def _on_roles_error(self, sub_id: str, msg: str) -> None:
+        # Only an expired or missing session opens the dialog, and only once;
+        # MFA, consent and other errors are reported for their subscription.
         if azure.is_auth_error(msg):
+            self._auth_failed_subs.append(sub_id)
             if not self._auth_error_shown:
                 self._auth_error_shown = True
-                from fomo.app import AuthErrorModal
-
-                self.app.push_screen(AuthErrorModal())
+                self.app.show_auth_error(  # type: ignore[attr-defined]
+                    azure.classify_auth_error(msg), msg, self._retry_failed_subs
+                )
         else:
             self.notify(f"[{sub_id[:8]}…] {msg}", severity="error", timeout=8, markup=False)
         self._increment_loaded()
+
+    def _retry_failed_subs(self) -> None:
+        """Reload the subscriptions that failed with a session error (Retry after re-login)."""
+        failed, self._auth_failed_subs = self._auth_failed_subs, []
+        self._auth_error_shown = False
+        if not failed or not self.is_attached:
+            return
+        self._loaded_count -= len(failed)
+        if not self.query_one("#split").display:
+            self.query_one("#spinner").display = True
+            self.query_one("#loading-label", Label).update(f"Loading roles… {self._loaded_count}/{len(self._sub_ids)}")
+        for sub_id in failed:
+            self._load_roles_for_sub(sub_id)
 
     def _increment_loaded(self) -> None:
         self._loaded_count += 1
@@ -152,7 +169,8 @@ class RolesScreen(VimNavMixin, Screen):
         self.all_roles = unique
         self.query_one("#loading-area").display = False
         self.query_one("#split").display = True
-        self._rebuild_list("")
+        # Keep the filter: after a retry the list may already have been in use.
+        self._rebuild_list(self.query_one("#filter", Input).value)
         self.query_one("#filter").focus()
 
     # ------------------------------------------------------------------

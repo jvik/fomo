@@ -4,22 +4,33 @@ AuthErrorModal {
     align: center middle;
 }
 
+/* 64 columns leave 58 for text (wrapped) and three 16-column buttons;
+   the whole dialog fits an 80x24 terminal. */
 #auth-error-dialog {
     background: $surface;
     border: thick $error;
-    padding: 1 3;
-    width: 52;
+    padding: 1 2;
+    width: 64;
+    max-width: 100%;
     height: auto;
+    max-height: 100%;
 }
 
 #auth-error-title {
+    width: 1fr;
     text-style: bold;
     color: $error;
     margin-bottom: 1;
 }
 
+/* width: 1fr makes the labels wrap instead of running past the border. */
 #auth-error-body {
+    width: 1fr;
     margin-bottom: 1;
+}
+
+#auth-error-message {
+    width: 1fr;
 }
 
 #auth-error-buttons {
@@ -27,7 +38,7 @@ AuthErrorModal {
     margin-top: 1;
 }
 
-#auth-error-ok {
+#auth-error-retry, #auth-error-ok {
     width: 1fr;
     margin-right: 1;
 }

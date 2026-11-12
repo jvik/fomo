@@ -64,6 +64,7 @@ class ScopeScreen(VimNavMixin, Screen):
         self._selected_ids: set[str] = set()
         self._rebuilding = False
         self._subs_desc = False
+        self._subs_loading = False
         # Entra tab state
         self._entra_loaded = False
         self._entra_loading = False
@@ -146,8 +147,28 @@ class ScopeScreen(VimNavMixin, Screen):
     # Azure — subscription loading
     # ------------------------------------------------------------------
 
-    @work(thread=True)
+    @property
+    def has_subscriptions(self) -> bool:
+        """True once the subscription list has loaded with at least one entry."""
+        return bool(self._all_subs)
+
+    def reload_subscriptions(self) -> None:
+        """Fetch the subscription list again (Retry after re-login).
+
+        Does nothing while a load is already running.
+        """
+        if self._subs_loading or not self.is_attached:
+            return
+        self.query_one("#spinner").display = True
+        self.query_one("#loading-label", Label).update("Loading Azure subscriptions…")
+        self._load_subs()
+
     def _load_subs(self) -> None:
+        self._subs_loading = True
+        self._fetch_subs()
+
+    @work(thread=True)
+    def _fetch_subs(self) -> None:
         try:
             subs = self.app.backend.list_subscriptions()  # type: ignore[attr-defined]
             self.app.call_from_thread(self._show_subs, subs)
@@ -155,6 +176,7 @@ class ScopeScreen(VimNavMixin, Screen):
             self.app.call_from_thread(self._show_error, str(exc))
 
     def _show_subs(self, subs: list[azure.Subscription]) -> None:
+        self._subs_loading = False
         self.query_one("#spinner").display = False
         self.query_one("#loading-label", Label).update(f"Select subscriptions  ({len(subs)} found)")
         self._all_subs = subs
@@ -167,12 +189,16 @@ class ScopeScreen(VimNavMixin, Screen):
         self.query_one("#scope-tabs").focus()
 
     def _show_error(self, msg: str) -> None:
+        self._subs_loading = False
         self.query_one("#spinner").display = False
         body: str | Content
         if azure.is_auth_error(msg):
             body = (
                 "[bold red]Azure session expired.[/bold red]\n\n"
                 "Run [bold]az login[/bold] in your terminal, then restart fomo."
+            )
+            self.app.show_auth_error(  # type: ignore[attr-defined]
+                azure.classify_auth_error(msg), msg, self.reload_subscriptions
             )
         else:
             body = safe_markup(
