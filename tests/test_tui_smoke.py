@@ -31,14 +31,19 @@ SIZE = (120, 40)
 
 @pytest.fixture
 def make_app(monkeypatch: pytest.MonkeyPatch) -> Callable[..., PimApp]:
-    """Build a PimApp with theme detection and the dbus watcher stubbed."""
+    """Build a PimApp with theme detection and the dbus watcher stubbed.
+
+    Animations are off, so tab switches and scrolls don't wait for them.
+    """
     monkeypatch.setattr(app_module, "_system_is_dark", lambda: True)
     monkeypatch.setattr(PimApp, "_watch_color_scheme", lambda self: None)
 
     def _make(**kw: Any) -> PimApp:
         kw.setdefault("demo_mode", True)
         kw.setdefault("dry_run", True)
-        return PimApp(**kw)
+        app = PimApp(**kw)
+        app.animation_level = "none"
+        return app
 
     return _make
 

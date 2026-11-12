@@ -28,12 +28,14 @@ MG = "/providers/Microsoft.Management/managementGroups/root"
 
 @pytest.fixture
 def make_app(monkeypatch: pytest.MonkeyPatch) -> Callable[..., PimApp]:
-    """Demo-mode PimApp with theme detection and the dbus watcher stubbed."""
+    """Demo-mode PimApp with theme detection and the dbus watcher stubbed, animations off."""
     monkeypatch.setattr(app_module, "_system_is_dark", lambda: True)
     monkeypatch.setattr(PimApp, "_watch_color_scheme", lambda self: None)
 
     def _make(**kw: Any) -> PimApp:
-        return PimApp(demo_mode=True, dry_run=True, **kw)
+        app = PimApp(demo_mode=True, dry_run=True, **kw)
+        app.animation_level = "none"
+        return app
 
     return _make
 

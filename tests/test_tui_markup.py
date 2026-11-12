@@ -55,10 +55,16 @@ TIER_TEXT = "Assign roles at [/subscriptions/*] scope"
 
 @pytest.fixture
 def make_live_app(monkeypatch: pytest.MonkeyPatch, fake_azure: Any) -> Callable[[], PimApp]:
-    """PimApp on the fake Azure boundary: not demo mode, dry run on."""
+    """PimApp on the fake Azure boundary: not demo mode, dry run on, animations off."""
     monkeypatch.setattr(app_module, "_system_is_dark", lambda: True)
     monkeypatch.setattr(PimApp, "_watch_color_scheme", lambda self: None)
-    return lambda: PimApp(demo_mode=False, dry_run=True)
+
+    def _make() -> PimApp:
+        app = PimApp(demo_mode=False, dry_run=True)
+        app.animation_level = "none"
+        return app
+
+    return _make
 
 
 def _serve_tiering(monkeypatch: pytest.MonkeyPatch, guid: str) -> None:

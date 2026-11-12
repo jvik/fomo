@@ -42,7 +42,9 @@ def make_tui(monkeypatch: pytest.MonkeyPatch) -> Callable[..., PimApp]:
     monkeypatch.setattr(PimApp, "_watch_color_scheme", lambda self: None)
 
     def _make(demo_mode: bool = False) -> PimApp:
-        return PimApp(demo_mode=demo_mode, dry_run=True)
+        app = PimApp(demo_mode=demo_mode, dry_run=True)
+        app.animation_level = "none"
+        return app
 
     return _make
 
