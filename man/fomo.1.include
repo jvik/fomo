@@ -115,6 +115,9 @@ Keys that don't apply at the moment are dimmed.
 \fBEscape\fR or \fB?\fR closes the list.
 While typing in a field, \fB?\fR is typed; use \fBF1\fR there.
 .TP
+.B Ctrl\-t
+Switch between the dark and the light theme, also while typing.
+.TP
 .B Ctrl\-c
 Quit (with text selected, copy it instead).
 The footer shows it wherever \fBq\fR doesn't quit: while typing in a
@@ -357,6 +360,15 @@ and the session must be authenticated (\fBaz login\fR).
 .B HOME
 The token and tiering caches live in \fI$HOME/.cache/fomo/\fR
 (see \fBFILES\fR).
+.TP
+.B FOMO_THEME
+\fBdark\fR or \fBlight\fR: use that theme and skip detecting the system's
+colour scheme.
+Any other value is ignored.
+Without it, \fBfomo\fR starts dark and switches to light shortly after
+startup if the desktop prefers it (the freedesktop portal, GNOME or KDE
+settings, or \fBGTK_THEME\fR on Linux; the system appearance on macOS).
+\fBCtrl\-t\fR switches theme at any time.
 .TP
 .B TERM
 A terminal emulator that supports 256 colours and Unicode is recommended

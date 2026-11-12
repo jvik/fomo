@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from collections.abc import Callable
 
 from textual import events, on
@@ -175,82 +176,84 @@ def _parse_color_scheme_line(state: _ColorSchemeState, line: str) -> tuple[_Colo
     return _COLOR_SCHEME_IDLE, None
 
 
+_THEMES = {"dark": "fomo-dark", "light": "fomo-light"}
+
+
+def _theme_override() -> str | None:
+    """The theme ``FOMO_THEME`` asks for ("dark" or "light"), or None to follow the system."""
+    return _THEMES.get(os.environ.get("FOMO_THEME", "").strip().lower())
+
+
+# How long each colour-scheme probe may take.  Detection runs in a worker
+# after startup, so even a hanging desktop service never delays the app.
+_PROBE_TIMEOUT = 0.3
+
+
+def _probe(args: list[str]) -> subprocess.CompletedProcess[str] | None:
+    """Run a colour-scheme probe; None if it isn't installed, can't start or times out."""
+    try:
+        return subprocess.run(args, capture_output=True, text=True, timeout=_PROBE_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def _system_is_dark() -> bool:
-    """Return True if the system prefers a dark colour scheme."""
+    """Return True if the system prefers a dark colour scheme (also when it can't tell).
+
+    Asks one source after another and stops at the first decisive answer.
+    Each probe can take up to 0.3 s, so call this from a worker thread.
+    """
+    if sys.platform == "darwin":
+        # "Dark" in dark mode; in light mode the key doesn't exist (exit status 1).
+        result = _probe(["defaults", "read", "-g", "AppleInterfaceStyle"])
+        if result is None:
+            return True
+        return result.returncode == 0 and "dark" in result.stdout.lower()
+
     # Freedesktop portal — most reliable cross-DE method
     # Returns: 0 = no preference, 1 = dark, 2 = light
-    try:
-        result = subprocess.run(
-            [
-                "dbus-send",
-                "--session",
-                "--dest=org.freedesktop.portal.Desktop",
-                "--print-reply",
-                "/org/freedesktop/portal/desktop",
-                "org.freedesktop.portal.Settings.Read",
-                "string:org.freedesktop.appearance",
-                "string:color-scheme",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=1,
-        )
-        if result.returncode == 0:
-            # Output contains "uint32 <value>" — extract last integer
-            for token in reversed(result.stdout.split()):
-                if token.isdigit():
-                    scheme = int(token)
-                    if scheme == 1:
-                        return True
-                    if scheme == 2:
-                        return False
-                    break  # 0 = no preference, fall through
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    result = _probe(
+        [
+            "dbus-send",
+            "--session",
+            "--dest=org.freedesktop.portal.Desktop",
+            "--print-reply",
+            "/org/freedesktop/portal/desktop",
+            "org.freedesktop.portal.Settings.Read",
+            "string:org.freedesktop.appearance",
+            "string:color-scheme",
+        ]
+    )
+    if result is not None and result.returncode == 0:
+        # Output contains "uint32 <value>" — extract last integer
+        for token in reversed(result.stdout.split()):
+            if token.isdecimal():
+                scheme = int(token)
+                if scheme == 1:
+                    return True
+                if scheme == 2:
+                    return False
+                break  # 0 = no preference, fall through
 
     # GNOME / colour-scheme setting
-    try:
-        result = subprocess.run(
-            ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
-            capture_output=True,
-            text=True,
-            timeout=1,
-        )
-        if result.returncode == 0:
-            val = result.stdout.strip().strip("'\"")
-            if val == "prefer-dark":
-                return True
-            if val == "prefer-light":
-                return False
-            # 'default' means no preference — fall through to gtk-theme
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    result = _probe(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"])
+    if result is not None and result.returncode == 0:
+        val = result.stdout.strip().strip("'\"")
+        if val == "prefer-dark":
+            return True
+        if val == "prefer-light":
+            return False
+        # 'default' means no preference — fall through to gtk-theme
 
     # GTK theme name (e.g. "Adwaita-dark", "Arc-Dark")
-    try:
-        result = subprocess.run(
-            ["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"],
-            capture_output=True,
-            text=True,
-            timeout=1,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return "dark" in result.stdout.lower()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    result = _probe(["gsettings", "get", "org.gnome.desktop.interface", "gtk-theme"])
+    if result is not None and result.returncode == 0 and result.stdout.strip():
+        return "dark" in result.stdout.lower()
 
     # KDE plasma
-    try:
-        result = subprocess.run(
-            ["kreadconfig5", "--group", "General", "--key", "ColorScheme"],
-            capture_output=True,
-            text=True,
-            timeout=1,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return "dark" in result.stdout.lower()
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    result = _probe(["kreadconfig5", "--group", "General", "--key", "ColorScheme"])
+    if result is not None and result.returncode == 0 and result.stdout.strip():
+        return "dark" in result.stdout.lower()
 
     # GTK_THEME env var (e.g. "Adwaita:dark")
     gtk_theme = os.environ.get("GTK_THEME", "")
@@ -272,6 +275,7 @@ class PimApp(App):
         # run the same action, and the footer shows the first one that applies.
         Binding("question_mark", "show_keys", "Keys"),
         Binding("f1", "show_keys", "Keys", key_display="F1", priority=True),
+        Binding("ctrl+t", "toggle_theme", "Dark/light theme", show=False, priority=True),
         # ctrl+c always quits (unless there is selected text to copy).  The
         # first binding puts it in the footer wherever q doesn't quit: while
         # typing, and on screens where q goes back.  Otherwise it is disabled
@@ -288,7 +292,11 @@ class PimApp(App):
         self.entra = entra
         self.demo_mode = demo_mode
         self.backend: Backend = make_backend(dry_run=dry_run, demo_mode=demo_mode)
-        self.theme = "fomo-dark" if _system_is_dark() else "fomo-light"
+        override = _theme_override()
+        # Dark until the system's colour scheme is known (see on_mount).
+        self.theme = override or "fomo-dark"
+        # Set by FOMO_THEME or ctrl+t: the system's colour scheme no longer applies.
+        self._theme_chosen = override is not None
         self._color_scheme_proc: subprocess.Popen | None = None
 
     def on_mount(self) -> None:
@@ -298,8 +306,24 @@ class PimApp(App):
             self.title = "fomo  ·  Azure PIM  [DRY RUN]"
         initial_tab = "tab-entra" if self.entra else "tab-azure"
         self.push_screen(ScopeScreen(initial_tab=initial_tab))
-        self._watch_color_scheme()
+        if not self._theme_chosen:
+            self.run_worker(self._detect_theme, thread=True)
+            self._watch_color_scheme()
         self.run_worker(self._load_account_info, thread=True)
+
+    def _detect_theme(self) -> None:
+        """Thread worker: switch to the system's colour scheme once it is known."""
+        theme = "fomo-dark" if _system_is_dark() else "fomo-light"
+        self.call_from_thread(self._apply_system_theme, theme)
+
+    def _apply_system_theme(self, theme: str) -> None:
+        if not self._theme_chosen:  # ctrl+t while detection was running
+            self.theme = theme
+
+    def action_toggle_theme(self) -> None:
+        """ctrl+t: switch between the dark and the light theme."""
+        self._theme_chosen = True
+        self.theme = "fomo-light" if self.theme == "fomo-dark" else "fomo-dark"
 
     def _load_account_info(self) -> None:
         if self.demo_mode:
@@ -398,25 +422,24 @@ class PimApp(App):
 
     def _watch_color_scheme(self) -> None:
         """Start background worker that listens for OS dark/light changes."""
-        try:
-            subprocess.run(["dbus-monitor", "--version"], capture_output=True, timeout=1)
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            return
         self.run_worker(self._dbus_color_scheme_watcher, thread=True)
 
     def _dbus_color_scheme_watcher(self) -> None:
         """Thread worker: tail dbus-monitor and update theme on changes."""
         worker = get_current_worker()
-        proc = subprocess.Popen(
-            [
-                "dbus-monitor",
-                "--session",
-                "type='signal',interface='org.freedesktop.portal.Settings',member='SettingChanged'",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
+        try:
+            proc = subprocess.Popen(
+                [
+                    "dbus-monitor",
+                    "--session",
+                    "type='signal',interface='org.freedesktop.portal.Settings',member='SettingChanged'",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+        except OSError:  # no dbus-monitor (e.g. macOS)
+            return
         self._color_scheme_proc = proc
         assert proc.stdout is not None  # stdout=PIPE always provides a stream
         state = _COLOR_SCHEME_IDLE

@@ -112,6 +112,12 @@ Press `i` on the first screen to see your currently active Azure and Entra assig
 
 Press `?` on any screen to see all of its keys, including those the footer has no room for (`F1` while typing in a field). `ctrl+c` quits from anywhere.
 
+**Theme:** fomo follows the system's dark or light preference (Linux desktops and macOS). Press `ctrl+t` to switch at any time, or set `FOMO_THEME=dark` or `FOMO_THEME=light` to pick one and skip detection:
+
+```sh
+FOMO_THEME=light fomo
+```
+
 Management-group activation isn't available in the TUI; use the CLI's `--mg` (see below).
 
 **Dry-run mode** (no real API calls):

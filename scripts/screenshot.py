@@ -13,6 +13,7 @@ Outputs SVGs to docs/screenshots/.  Commit and reference them in README.md:
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
 from textual.widgets import Input, SelectionList
@@ -28,13 +29,13 @@ COLS, ROWS = 120, 36
 def _make_app():
     """Create a demo PimApp that always renders with the dark theme.
 
-    Ignores the OS colour scheme and disables the live dbus theme watcher so
-    screenshots are reproducible regardless of the machine they run on.
+    FOMO_THEME=dark skips the OS colour-scheme detection and the live dbus
+    theme watcher, so screenshots are reproducible regardless of the machine
+    (or a FOMO_THEME in the caller's environment).
     """
     from fomo import app as app_module
 
-    app_module._system_is_dark = lambda: True
-    app_module.PimApp._watch_color_scheme = lambda _self: None
+    os.environ["FOMO_THEME"] = "dark"
     return app_module.PimApp(demo_mode=True, dry_run=True)
 
 
