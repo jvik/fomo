@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from textual.coordinate import Coordinate
 from textual.pilot import Pilot
-from textual.widgets import Button, DataTable, TabbedContent, Tabs
+from textual.widgets import Button, DataTable, Input, TabbedContent, Tabs
 
 from fomo import app as app_module
 from fomo.app import AuthErrorModal, PimApp
@@ -108,7 +108,9 @@ async def _open_roles(pilot: Pilot) -> FomoSelectionList:
 
 async def _activate_and_wait(pilot: Pilot) -> None:
     app = pilot.app
-    await pilot.press(*"smoketest")
+    # Set, not typed: typing into the reason field is covered in
+    # test_activation_screens.py, and each key press costs Pilot an idle wait.
+    app.screen.query_one("#justification", Input).value = "smoketest"
     await pilot.click("#btn-activate")
     await wait_for(pilot, lambda: str(app.screen.query_one("#btn-back", Button).label) == "Done")
 
