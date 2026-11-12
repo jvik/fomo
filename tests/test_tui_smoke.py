@@ -187,6 +187,15 @@ def test_activation_screen_dry_run(make_app, fake_azure) -> None:
             assert cells
             assert all("DryRun" in c for c in cells), cells
 
+            # Escape after the run (F10): back on the roles screen, the role
+            # is now "(active)" and disabled, and nothing is selected.
+            await pilot.press("escape")
+            await wait_for(pilot, lambda: isinstance(app.screen, RolesScreen))
+            await wait_for(pilot, lambda: roles.get_option_at_index(idx).disabled)
+            assert "(active)" in str(roles.get_option_at_index(idx).prompt)
+            assert app.screen._selected == set()
+            assert roles.selected == []
+
         assert len(fake_azure.activations) == 1
         assert all(dry_run for *_, dry_run in fake_azure.activations)
         assert fake_azure.justifications == ["smoketest"]
@@ -213,6 +222,15 @@ def test_entra_activation_screen_dry_run(make_app, fake_azure) -> None:
             cells = _status_cells(app.screen.query_one("#roles-table", DataTable), 2)
             assert cells
             assert all("DryRun" in c for c in cells), cells
+
+            # Enter (Done) after the run (F10): back on the Entra tab, the
+            # role is marked "(active)" and the selection is cleared.
+            await pilot.press("enter")
+            await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
+            assert app.screen.query_one("#scope-tabs", TabbedContent).active == "tab-entra"
+            await wait_for(pilot, lambda: "(active)" in _prompts(entra)[idx])
+            assert app.screen._selected == set()
+            assert entra.selected == []
 
         assert len(fake_azure.activations) == 1
         assert all(dry_run for *_, dry_run in fake_azure.activations)

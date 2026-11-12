@@ -2,9 +2,10 @@
 
 They cover the behaviour shared through ``ActivationScreenBase``: failure rows,
 the error log, error bookkeeping across the sub/global tables, the layout on
-small terminals (F07) and the keys of the reason field.  The layout and key
-tests run against the fake Azure boundary with ``dry_run=False``, so the fake
-``activate_role`` records real (fake) activations.
+small terminals (F07), the keys of the reason field and the next steps after a
+run (F10).  The layout and key tests run against the fake Azure boundary with
+``dry_run=False``, so the fake ``activate_role`` records real (fake)
+activations.
 """
 
 from __future__ import annotations
@@ -22,10 +23,20 @@ from textual.widgets import Button, DataTable, Input, RichLog, Select
 from fomo import app as app_module
 from fomo.app import PimApp
 from fomo.azure import EligibleRole, EntraEligibleRole
-from fomo.screens._activation_base import fit_column_widths, summarize_activation_error
+from fomo.screens._activation_base import (
+    ActivationScreenBase,
+    Outcome,
+    fit_column_widths,
+    status_outcome,
+    summarize_activation_error,
+    summarize_outcomes,
+)
 from fomo.screens.activation_screen import ActivationScreen
+from fomo.screens.assignments_screen import AssignmentsScreen
 from fomo.screens.entra_screen import EntraActivationScreen
+from fomo.screens.roles_screen import RolesScreen
 from fomo.screens.scope_screen import ScopeScreen
+from fomo.widgets import FomoSelectionList
 from tests.test_tui_markup import _rendered, _toasts
 from tests.test_tui_smoke import SIZE, _status_cells, wait_for
 
@@ -399,5 +410,140 @@ def test_escape_and_q_go_back_when_not_typing(make_live_app, fake_azure) -> None
             await pilot.press("tab", "q")
             await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
             assert fake_azure.activations == []
+
+            # Once a run has finished, q quits (F10).
+            screen = ActivationScreen([_arm("Reader", SUB)])
+            await _open(pilot, screen)
+            screen.query_one("#justification", Input).value = "why"
+            await pilot.press("enter")
+            await _wait_done(pilot, screen)
+            await pilot.press("q")
+            await wait_for(pilot, lambda: app.return_code == 0)
+
+    asyncio.run(scenario())
+
+
+# ---------------------------------------------------------------------------
+# After a run (F10): summary, retry failed, assignments, Done
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("status", "outcome", "cell"),
+    [
+        ("Provisioned", Outcome.ACTIVATED, "✓ Provisioned"),
+        ("Granted", Outcome.ACTIVATED, "✓ Granted"),
+        ("DryRun", Outcome.SIMULATED, "✓ DryRun"),
+        ("PendingApproval", Outcome.PENDING_APPROVAL, "⏳ PendingApproval"),
+        ("PendingApprovalProvisioning", Outcome.PENDING_APPROVAL, "⏳ PendingApprovalProvisioning"),
+        ("PendingAdminDecision", Outcome.PENDING_APPROVAL, "⏳ PendingAdminDecision"),
+        ("PendingProvisioning", Outcome.PENDING, "⏳ PendingProvisioning"),
+        ("Accepted", Outcome.PENDING, "⏳ Accepted"),
+        ("ScheduleCreated", Outcome.PENDING, "⏳ ScheduleCreated"),
+        ("Denied", Outcome.FAILED, "✗ Denied"),
+        ("TimedOut", Outcome.FAILED, "✗ TimedOut"),
+        ("Submitted", Outcome.SUBMITTED, "Submitted"),
+    ],
+)
+def test_status_outcome_and_cell(status: str, outcome: Outcome, cell: str) -> None:
+    assert status_outcome(status) is outcome
+    assert str(ActivationScreenBase._format_status(status)) == cell
+
+
+A, D, PA, P, S, F = (
+    Outcome.ACTIVATED,
+    Outcome.SIMULATED,
+    Outcome.PENDING_APPROVAL,
+    Outcome.PENDING,
+    Outcome.SUBMITTED,
+    Outcome.FAILED,
+)
+
+
+@pytest.mark.parametrize(
+    ("outcomes", "text", "severity"),
+    [
+        ([F, A, PA, A], "2 activated · 1 pending approval · 1 failed", "error"),
+        ([F, F], "2 failed", "error"),
+        ([A, PA], "1 activated · 1 pending approval", "warning"),
+        ([P, A], "1 activated · 1 pending", "warning"),
+        ([A, A, A], "3 activated", "information"),
+        ([D, D], "2 activated (dry run)", "information"),
+        ([S, A], "1 activated · 1 submitted", "information"),
+    ],
+)
+def test_summarize_outcomes(outcomes: list[Outcome], text: str, severity: str) -> None:
+    assert summarize_outcomes(outcomes) == (text, severity)
+
+
+def test_retry_failed_assignments_and_done_after_a_run(make_live_app, fake_azure) -> None:
+    fake_azure.fail_on = {"Key Vault Reader"}
+
+    async def scenario() -> None:
+        app = make_live_app()
+        async with app.run_test(size=SIZE, notifications=True) as pilot:
+            await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
+            scope = app.screen
+            sub_list = scope.query_one("#sub-list", FomoSelectionList)
+            await wait_for(pilot, lambda: sub_list.option_count == 2)
+            sub_list.select("s1")
+            await wait_for(pilot, lambda: scope._selected_ids == {"s1"})
+
+            # Roles screen: select Reader and Key Vault Reader on s1, proceed.
+            roles_screen = RolesScreen(["s1"])
+            await app.push_screen(roles_screen)
+            role_list = roles_screen.query_one("#role-list", FomoSelectionList)
+            await wait_for(pilot, lambda: role_list.option_count > 0)
+            for index, role in enumerate(roles_screen.all_roles):
+                if role.role_name in ("Reader", "Key Vault Reader") and not role.is_global:
+                    role_list.select(index)
+            roles_screen.action_proceed()
+            await wait_for(pilot, lambda: app.focused is app.screen.query_one("#justification"))
+            screen = app.screen
+            assert isinstance(screen, ActivationScreen)
+            assert {"r", "i"}.isdisjoint(screen.active_bindings)  # only after a run
+
+            screen.query_one("#justification", Input).value = "why"
+            await pilot.press("enter")
+            await _wait_done(pilot, screen)
+            assert [name for name, *_ in fake_azure.activations] == ["Reader", "Key Vault Reader"]
+            await wait_for(pilot, lambda: "1 activated · 1 failed — see Details below." in _toasts(app))
+            btn_activate = screen.query_one("#btn-activate", Button)
+            assert str(btn_activate.label) == "Retry failed (1)"
+            assert not btn_activate.disabled
+            actions = {key: active.binding.action for key, active in screen.active_bindings.items()}
+            assert {key: actions.get(key) for key in ("enter", "r", "i", "q")} == {
+                "enter": "done",
+                "r": "retry_failed",
+                "i": "assignments",
+                "q": "quit_app",
+            }
+
+            # r retries only the failed role.
+            fake_azure.fail_on = set()
+            await pilot.press("r")
+            await wait_for(pilot, lambda: len(fake_azure.activations) == 3 and not screen._activating)
+            assert fake_azure.activations[2] == ("Key Vault Reader", "/subscriptions/s1", "PT1H", False)
+            assert _status_cells(screen.query_one("#roles-table", DataTable), 3) == ["✓ Provisioned"] * 2
+            await wait_for(pilot, lambda: "2 activated" in _toasts(app))
+            assert btn_activate.disabled
+            assert "r" not in screen.active_bindings
+            assert screen.query_one("#error-log").has_class("hidden")
+
+            # i shows the active assignments, loaded afresh.
+            await pilot.press("i")
+            await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
+            await wait_for(pilot, lambda: ("list_active_arm_assignments",) in fake_azure.calls)
+            await app.pop_screen()
+            await wait_for(pilot, lambda: app.focused is screen.query_one("#btn-back"))
+
+            # Enter (Done) returns to the scope screen, discarding the roles
+            # screen; the subscription selection is kept.
+            await pilot.press("enter")
+            await wait_for(pilot, lambda: app.screen is scope)
+            await wait_for(pilot, lambda: roles_screen not in app.screen_stack)
+            assert scope._selected_ids == {"s1"}
+            assert sub_list.selected == ["s1"]
+            assert len(fake_azure.activations) == 3
 
     asyncio.run(scenario())

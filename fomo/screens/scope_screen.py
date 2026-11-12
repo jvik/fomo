@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from typing import TYPE_CHECKING
 
 from textual import on, work
 from textual.app import ComposeResult
@@ -25,6 +26,9 @@ from textual.widgets.selection_list import Selection
 from fomo import azure, tiering
 from fomo.screens._common import VimNavMixin, device_code_markup, safe_markup, wrap_error_lines
 from fomo.widgets import FomoSelectionList as SelectionList
+
+if TYPE_CHECKING:
+    from fomo.screens._activation_base import ActivationResult
 
 MAX_SUBSCRIPTIONS = 3
 ENTRA_SORT_MODES = ("name", "tier", "expiry")
@@ -567,7 +571,7 @@ class ScopeScreen(VimNavMixin, Screen):
                 )
             from fomo.screens.entra_screen import EntraActivationScreen
 
-            self.app.push_screen(EntraActivationScreen(selected_roles))
+            self.app.push_screen(EntraActivationScreen(selected_roles), self._after_entra_activation)
         else:
             selected_ids: list[str] = list(self._selected_ids)
             if not selected_ids:
@@ -576,6 +580,22 @@ class ScopeScreen(VimNavMixin, Screen):
             from fomo.screens.roles_screen import RolesScreen
 
             self.app.push_screen(RolesScreen(selected_ids))
+
+    def _after_entra_activation(self, result: ActivationResult[azure.EntraEligibleRole] | None) -> None:
+        """Back on the Entra tab from the Entra activation screen (Done or Escape).
+
+        After a run (*result* is not ``None``), mark the activated roles
+        active and clear the selection, so nothing is submitted twice.
+        """
+        if result is None or not self.is_attached:
+            return
+        activated = {(role.role_definition_id, role.directory_scope_id) for role in result.activated}
+        for role in self.all_roles:
+            if (role.role_definition_id, role.directory_scope_id) in activated:
+                role.is_active = True
+        self._selected.clear()
+        self._rebuild_entra_list(self.query_one("#entra-filter", Input).value)
+        self._update_entra_status()
 
     def action_select_focused(self) -> None:
         list_id = "#entra-role-list" if self._active_tab() == "tab-entra" else "#sub-list"

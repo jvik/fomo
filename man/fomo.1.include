@@ -77,6 +77,11 @@ A failed role shows a short reason there, such as
 \fBDetails\fR panel below the table.
 Global (management-group-scoped) roles are highlighted separately because
 they remain active across all subscriptions under that scope.
+When all requests have returned, a summary of the outcomes (activated,
+pending approval, failed) is shown, and you can retry the failed roles,
+look at your active assignments, quit, or press \fBDone\fR to go back to
+the first screen with your subscriptions still selected (see
+\fBKEY BINDINGS\fR).
 .SS Entra tab
 The first screen has a second tab, \fBEntra\fR, listing your eligible
 Microsoft Entra ID directory roles.
@@ -169,22 +174,38 @@ Return to the subscription screen.
 .SS Activation screens (Azure and Entra)
 .TP
 .B Enter
-In the reason (justification) field, activate the roles.
+In the reason (justification) field, activate the roles (after a run
+with failures, retry the failed ones).
 With an empty reason, show a warning instead.
+After the run, on the \fBDone\fR button, return to the first screen:
+the Azure tab with your subscriptions still selected (the role selection
+screen is closed), or the Entra tab with the selection cleared and the
+activated roles marked active.
 .TP
 .B Tab
 Move from the reason field to the duration selector.
 .TP
 .B Escape
-Return to the role selection screen.
+Return to the role selection screen (Azure) or the Entra tab.
+After a run, the activated roles are marked active there and the selection
+is cleared, so they cannot be submitted twice.
 If the reason field has focus and contains text, the first \fBEscape\fR
 only leaves the field and keeps the text; press it again to go back.
 With the duration menu open, \fBEscape\fR closes the menu.
 Going back is not possible while an activation is running.
 .TP
 .B q
-Return to the role selection screen, like \fBEscape\fR, when you are not
-typing in the reason field.
+Before the run, go back like \fBEscape\fR; after it, quit fomo.
+While you are typing in the reason field, \fBq\fR is typed instead.
+.TP
+.B r
+After a run with failures, activate only the failed roles again, with the
+reason and duration as they are now.
+The \fBActivate\fR button, relabelled \fBRetry failed\fR, does the same.
+.TP
+.B i
+After the run, show your active assignments (see \fBAssignments screen\fR).
+\fBEscape\fR returns to the activation screen.
 .SS Assignments screen
 .TP
 .BR 1 \ /\  2 \ /\  3 \ /\  4

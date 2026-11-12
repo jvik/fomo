@@ -17,7 +17,7 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - [x] 03f fix(azure): user lookup once, bounded loads, logged lookups, device-code hardening
 - [x] 04a fix(tui): h/l tab switching, list highlight on focus, Enter in the filter
 - [x] 04b feat(tui): activation screen layout, readable errors, consistent Escape
-- [ ] 04c feat(tui): next steps after activation
+- [x] 04c feat(tui): next steps after activation
 - [ ] 04d feat(tui): time left, selected-row styling, counts and order
 - [ ] 04e feat(tui): help panel, footers, theme override
 - [ ] 04f feat(tui): recent activations
@@ -55,3 +55,5 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - 04b: the activation tables use the brief's target columns, Role · Scope · Tier · Status (Entra: Role · Tier · Status), so the eligibility "Expires" column is gone there (the roles screen and its detail pane still show it). A Tier cell shows "—" when tier data hasn't loaded yet and isn't refreshed if it arrives later. An Azure selection of only global roles no longer shows an empty subscription table.
 - 04b: `RoleTable` sizes columns by setting DataTable's public `Column.width`/`auto_width` and rewriting a cell so the table re-measures, and `#roles-scroll DataTable { max-height: 999 }` lifts DataTable's default `max-height: 100%` (`initial` falls back to it); both are worth a check on a Textual upgrade. The Details panel writes with `expand=True`, because RichLog otherwise wraps at the console width (80 under `run_test`), not the panel's.
 - 04b: the suite now takes ~32.5 s (the new Pilot tests add ~3 s). `animation_level = "none"` in all shared fixtures saved almost nothing: Pilot's own idle wait after every key press (~40–100 ms) dominates, so real savings need fewer key presses in tests (e.g. setting an Input's value where typing isn't under test).
+- 04c: a "DryRun" status counts as activated: in `--dry-run`/`--demo`, going back after a run marks the simulated roles "(active)" too, and the summary reads "N activated (dry run)". A red status returned without an exception (Failed, Denied, Canceled, TimedOut) counts as failed and is retried by `r`; unknown statuses count as "submitted" (information). The summary covers every row, retried or not, and a retry clears the Details panel first. The Entra list only marks activated roles "(active)"; it still doesn't disable active roles (pre-existing). Enter is a priority binding enabled only on the Done button or with nothing focused, so the footer shows "⏎ Done" there.
+- 04c: the activation smoke tests now set the reason instead of typing it (separate `test:` commit, saves ~1.2 s); with the new F10 coverage the suite is at ~33 s.

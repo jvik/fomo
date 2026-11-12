@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from typing import TYPE_CHECKING
 
 from textual import on, work
 from textual.app import ComposeResult
@@ -16,6 +17,9 @@ from textual.widgets.selection_list import Selection
 from fomo import azure, tiering
 from fomo.screens._common import VimNavMixin, safe_markup
 from fomo.widgets import FomoSelectionList as SelectionList
+
+if TYPE_CHECKING:
+    from fomo.screens._activation_base import ActivationResult
 
 MAX_ROLES = 3
 SORT_MODES = ("name", "scope", "tier", "expiry")
@@ -434,4 +438,24 @@ class RolesScreen(VimNavMixin, Screen):
             )
         from fomo.screens.activation_screen import ActivationScreen
 
-        self.app.push_screen(ActivationScreen(selected_roles))
+        self.app.push_screen(ActivationScreen(selected_roles), self._after_activation)
+
+    def _after_activation(self, result: ActivationResult[azure.EligibleRole] | None) -> None:
+        """Back from the activation screen.
+
+        Without a finished run (*result* is ``None``) nothing changes.  After
+        one, Done returns to the scope screen, which keeps its subscription
+        selection; Escape stays here, with the activated roles marked active
+        (so they can't be submitted twice) and the selection cleared.
+        """
+        if result is None or not self.is_attached:
+            return
+        if result.done:
+            self.dismiss()
+            return
+        activated = {(role.role_definition_id, role.scope) for role in result.activated}
+        for role in self.all_roles:
+            if (role.role_definition_id, role.scope) in activated:
+                role.is_active = True
+        self._selected.clear()
+        self._rebuild_list(self.query_one("#filter", Input).value)

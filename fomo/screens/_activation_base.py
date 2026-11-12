@@ -5,13 +5,23 @@ it stays visible on small terminals, followed by the selected roles in one or
 more scrollable tables with a Status column, an error details panel that only
 appears after a failure, and the Activate/Back buttons.  The subclasses define
 their title, tables and columns and how a role is activated.
+
+When a run finishes, a summary toast reports the outcomes and the screen
+offers the next steps: retry the failed roles (``r``, or the Activate button,
+relabelled "Retry failed (N)"), show the active assignments (``i``), quit
+(``q``), or Done (Enter), which returns to the first screen.  The screen
+dismisses with an :class:`ActivationResult`, so the screen below can mark the
+activated roles active and clear its selection.
 """
 
 from __future__ import annotations
 
+import enum
 import logging
 import re
-from collections.abc import Sequence
+from collections import Counter
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from typing import ClassVar, Generic, TypeVar
 
 from rich.cells import cell_len
@@ -22,6 +32,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.coordinate import Coordinate
 from textual.events import Resize
+from textual.notifications import SeverityLevel
 from textual.screen import Screen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog, Select
 
@@ -70,6 +81,73 @@ def summarize_activation_error(message: str) -> str:
     if len(first_line) <= _SHORT_ERROR_LENGTH:
         return first_line
     return first_line[:_SHORT_ERROR_LENGTH] + "…"
+
+
+class Outcome(enum.Enum):
+    """How one role's activation request ended; the members are in summary order."""
+
+    ACTIVATED = "activated"
+    SIMULATED = "activated (dry run)"
+    PENDING_APPROVAL = "pending approval"
+    PENDING = "pending"
+    SUBMITTED = "submitted"  # a status fomo doesn't know
+    FAILED = "failed"
+
+
+# The role is active once the request returns (or would be, in a dry run).
+SUCCESS_OUTCOMES = frozenset({Outcome.ACTIVATED, Outcome.SIMULATED})
+
+# Status cell mark and style per outcome; any other outcome is shown plain.
+_OUTCOME_MARKS: dict[Outcome, tuple[str, str]] = {
+    Outcome.ACTIVATED: ("✓", "bold green"),
+    Outcome.SIMULATED: ("✓", "bold green"),
+    Outcome.PENDING_APPROVAL: ("⏳", "bold yellow"),
+    Outcome.PENDING: ("⏳", "bold yellow"),
+    Outcome.FAILED: ("✗", "bold red"),
+}
+
+
+def status_outcome(status: str) -> Outcome:
+    """Classify the status that ARM or Microsoft Graph returned for a request."""
+    if status in ("Provisioned", "Granted"):
+        return Outcome.ACTIVATED
+    if status == "DryRun":
+        return Outcome.SIMULATED
+    if "Approval" in status or status == "PendingAdminDecision":
+        return Outcome.PENDING_APPROVAL
+    if "Pending" in status or status in ("Accepted", "ScheduleCreated"):
+        return Outcome.PENDING
+    if status in ("Failed", "Denied", "Canceled", "TimedOut"):
+        return Outcome.FAILED
+    return Outcome.SUBMITTED
+
+
+def summarize_outcomes(outcomes: Iterable[Outcome]) -> tuple[str, SeverityLevel]:
+    """The end-of-run summary, e.g. "2 activated · 1 pending approval · 1 failed".
+
+    The severity is that of the worst outcome: an error if anything failed, a
+    warning if anything is still pending, otherwise information.
+    """
+    counts = Counter(outcomes)
+    text = " · ".join(f"{counts[outcome]} {outcome.value}" for outcome in Outcome if counts[outcome])
+    if counts[Outcome.FAILED]:
+        return text, "error"
+    if counts[Outcome.PENDING_APPROVAL] or counts[Outcome.PENDING]:
+        return text, "warning"
+    return text, "information"
+
+
+@dataclass(frozen=True)
+class ActivationResult(Generic[RoleT]):
+    """What an activation screen reports to the screen below when it closes after a run.
+
+    It closes with ``None`` when no run has finished.
+    """
+
+    # The roles whose request succeeded (✓): show them as active from now on.
+    activated: tuple[RoleT, ...]
+    # True for Done (return to the first screen), False for Escape or q (one screen back).
+    done: bool
 
 
 def fit_column_widths(available: int, natural: Sequence[int], shrink: Sequence[tuple[int, int]]) -> list[int]:
@@ -168,15 +246,25 @@ class RoleTable(DataTable):
         self.update_cell_at(origin, self.get_cell_at(origin), update_width=True)
 
 
-class ActivationScreenBase(Screen, Generic[RoleT]):
+class ActivationScreenBase(Screen[ActivationResult[RoleT] | None], Generic[RoleT]):
     """Justification form plus per-role activation progress."""
 
-    # Not priority bindings: a focused Input types "q", and an open Duration
-    # menu closes on Escape before the screen sees it.
+    # Enter, r, i and q (Quit) only apply once a run has finished, and the two
+    # q bindings take turns: check_action enables the ones that apply.  The
+    # letters and Escape are not priority bindings: a focused Input types the
+    # letters, and an open Duration menu closes on Escape before the screen
+    # sees it.  Enter is, so that the footer shows "Done" rather than the
+    # focused Done button's own (hidden) Enter; check_action leaves Enter to
+    # the reason field, the Duration menu and the Retry button.
     BINDINGS = [
+        Binding("enter", "done", "Done", show=True, priority=True),
+        Binding("r", "retry_failed", "Retry failed", show=True),
+        Binding("i", "assignments", "Assignments", show=True),
+        Binding("q", "quit_app", "Quit", show=True),
+        Binding("q", "back_before_run", "Back", show=False),
         Binding("escape", "back", "Back", show=True),
-        Binding("q", "back", "Back", show=False),
     ]
+    _AFTER_RUN_ACTIONS: ClassVar[frozenset[str]] = frozenset({"done", "retry_failed", "assignments", "quit_app"})
 
     # Labels of the columns before Status.
     COLUMNS: ClassVar[tuple[str, ...]]
@@ -188,7 +276,9 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
         super().__init__()
         self.roles: list[RoleT] = roles
         self._activating = False
+        self._finished = False  # a run has finished; later runs only retry failed rows
         self._errors: dict[int, str] = {}  # running row index → full error message
+        self._outcomes: dict[int, Outcome] = {}  # running row index → outcome of its last attempt
 
     # ------------------------------------------------------------------
     # Subclass hooks
@@ -269,14 +359,38 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
 
     @on(Button.Pressed, "#btn-back")
     def on_back_pressed(self) -> None:
-        self.action_back()
+        # The button reads "Done" once a run has finished.
+        if self._finished:
+            self.action_done()
+        else:
+            self.action_back()
 
     @on(Button.Pressed, "#btn-activate")
     def on_activate_pressed(self) -> None:
         self._start_activation()
 
+    def _rows(self) -> list[tuple[int, str, int, RoleT]]:
+        """``(index, table_id, row, role)`` for every role, in activation order.
+
+        *index* runs on across the tables; it keys ``_errors`` and ``_outcomes``.
+        """
+        rows: list[tuple[int, str, int, RoleT]] = []
+        for table_id, roles in self._role_tables():
+            for row, role in enumerate(roles):
+                rows.append((len(rows), table_id, row, role))
+        return rows
+
+    def _failed_rows(self) -> list[int]:
+        """Running indices of the rows whose last attempt failed."""
+        return sorted(index for index, outcome in self._outcomes.items() if outcome is Outcome.FAILED)
+
     def _start_activation(self) -> None:
-        """Activate every role, unless a run is going on or has finished."""
+        """Activate every role or, after a run, retry the failed ones.
+
+        Does nothing while a run is going on, or once nothing is left to retry
+        (the Activate button is disabled then).  A retry uses the reason and
+        duration as they are now.
+        """
         btn_activate = self.query_one("#btn-activate", Button)
         if self._activating or btn_activate.disabled:
             return
@@ -286,43 +400,96 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
             self.query_one("#justification").focus()
             return
         duration = self.query_one("#duration", Select).value or "PT1H"
+        rows = self._rows()
+        if self._finished:
+            retry = set(self._failed_rows())
+            rows = [entry for entry in rows if entry[0] in retry]
+            # The Details panel only shows the errors of the latest attempt.
+            self._errors.clear()
+            error_log = self.query_one("#error-log", RichLog)
+            error_log.clear()
+            error_log.add_class("hidden")
         self._activating = True
         btn_activate.disabled = True
         self.query_one("#btn-back", Button).disabled = True
-        self._run_activation(justification, duration)
+        self.refresh_bindings()
+        self._run_activation(rows, justification, duration)
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "back_before_run":
+            return not self._finished
+        if action in self._AFTER_RUN_ACTIONS:
+            if not self._finished or self._activating:
+                return False
+            if action == "done":
+                # Enter is Done on the Done button or with nothing focused;
+                # elsewhere it submits the reason, opens the menu or retries.
+                focused = self.focused
+                return focused is None or focused.id == "btn-back"
+            if action == "retry_failed":
+                return bool(self._failed_rows())
+        return super().check_action(action, parameters)
 
     def action_back(self) -> None:
-        """Escape, q and the Back button.
+        """Escape and the Back button, and q before a run.
 
         In a focused Input that has text, only leave the field and keep the
         text; the next Escape goes back.  Otherwise go back, unless an
-        activation is running.
+        activation is running.  After a run, the screen below marks the
+        activated roles active and clears its selection.
         """
         focused = self.focused
         if isinstance(focused, Input) and focused.value:
             self.set_focus(None)
             return
         if not self._activating:
-            self.app.pop_screen()
+            self.dismiss(self._result(done=False))
+
+    def action_back_before_run(self) -> None:
+        """q before a run finishes: the same as Escape (afterwards q quits)."""
+        self.action_back()
+
+    def action_done(self) -> None:
+        """Enter or the Done button after a run: return to the first screen."""
+        if self._finished and not self._activating:
+            self.dismiss(self._result(done=True))
+
+    def action_retry_failed(self) -> None:
+        """r after a run: activate the roles that failed again."""
+        self._start_activation()
+
+    def action_assignments(self) -> None:
+        """i after a run: show the active assignments, freshly loaded."""
+        from fomo.screens.assignments_screen import AssignmentsScreen
+
+        self.app.push_screen(AssignmentsScreen())
+
+    def action_quit_app(self) -> None:
+        """q after a run."""
+        self.app.exit()
+
+    def _result(self, done: bool) -> ActivationResult[RoleT] | None:
+        """The result to dismiss with: ``None`` unless a run has finished."""
+        if not self._finished:
+            return None
+        activated = tuple(role for index, _, _, role in self._rows() if self._outcomes.get(index) in SUCCESS_OUTCOMES)
+        return ActivationResult(activated, done)
 
     # ------------------------------------------------------------------
     # Background activation worker
     # ------------------------------------------------------------------
 
     @work(thread=True)
-    def _run_activation(self, justification: str, duration: str) -> None:
-        offset = 0
-        for table_id, roles in self._role_tables():
-            for i, role in enumerate(roles):
-                self._activate_row(table_id, i, offset + i, role, justification, duration)
-            offset += len(roles)
+    def _run_activation(self, rows: list[tuple[int, str, int, RoleT]], justification: str, duration: str) -> None:
+        for index, table_id, row, role in rows:
+            self._activate_row(table_id, row, index, role, justification, duration)
         self.app.call_from_thread(self._on_activation_done)
 
     def _activate_row(
         self,
         table_id: str,
         row: int,
-        error_index: int,
+        index: int,
         role: RoleT,
         justification: str,
         duration: str,
@@ -330,14 +497,19 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
         """Activate *role* and show progress in its table row (worker thread)."""
         self.app.call_from_thread(self._set_status, table_id, row, Text("Activating…"))
         label: Text
+        outcome: Outcome
         try:
-            label = self._format_status(self._activate(role, justification, duration))
+            status = self._activate(role, justification, duration)
+            outcome = status_outcome(status)
+            label = self._format_status(status)
         except Exception as exc:
             full_error = str(exc)
             self._log.error(self._FAILURE_LOG_MESSAGE, role.role_name, full_error)
-            self._errors[error_index] = full_error
+            self._errors[index] = full_error
+            outcome = Outcome.FAILED
             label = Text(f"✗ {summarize_activation_error(full_error)}", style="bold red")
             self.app.call_from_thread(self._append_error, role.role_name, full_error)
+        self._outcomes[index] = outcome
         self.app.call_from_thread(self._set_status, table_id, row, label)
 
     # ------------------------------------------------------------------
@@ -360,18 +532,21 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
 
     def _on_activation_done(self) -> None:
         self._activating = False
+        self._finished = True
+        failed = len(self._failed_rows())
+        btn_activate = self.query_one("#btn-activate", Button)
+        btn_activate.label = f"Retry failed ({failed})" if failed else "Activate"
+        btn_activate.disabled = not failed
         btn_back = self.query_one("#btn-back", Button)
         btn_back.disabled = False
         btn_back.label = "Done"
         btn_back.focus()
-        if self._errors:
-            self.notify(
-                f"{len(self._errors)} role(s) failed — see error details below.",
-                severity="error",
-                timeout=8,
-            )
-        else:
-            self.notify("Activation requests submitted.", severity="information")
+        self.refresh_bindings()
+        # The outcome of every row, retried or not, e.g. "2 activated · 1 failed".
+        summary, severity = summarize_outcomes(self._outcomes.values())
+        if failed:
+            summary += " — see Details below."
+        self.notify(summary, severity=severity, timeout=8 if severity == "error" else None, markup=False)
 
     @staticmethod
     def _format_status(status: str) -> Text:
@@ -380,10 +555,8 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
         A failed request (an exception) gets a red ✗ and the summary from
         :func:`summarize_activation_error` instead.
         """
-        if status in ("Provisioned", "Granted", "DryRun"):
-            return Text(f"✓ {status}", style="bold green")
-        if "Pending" in status or status in ("Accepted", "ScheduleCreated"):
-            return Text(f"⏳ {status}", style="bold yellow")
-        if status in ("Failed", "Denied", "Canceled", "TimedOut"):
-            return Text(f"✗ {status}", style="bold red")
-        return Text(status)
+        mark = _OUTCOME_MARKS.get(status_outcome(status))
+        if mark is None:
+            return Text(status)
+        symbol, style = mark
+        return Text(f"{symbol} {status}", style=style)
