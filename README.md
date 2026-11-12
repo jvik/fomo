@@ -6,11 +6,12 @@ A terminal UI for activating Azure PIM eligible roles with multiselect.
 
 - **Multiselect activation** — pick multiple eligible roles across subscriptions in one go
 - **Azure RBAC & Entra roles** — supports both subscription/resource-scoped PIM roles and Entra directory roles (Global Administrator, etc.)
-- **Management group scope** — activate roles at management group level
-- **Parallel activation** — all selected roles are activated concurrently with per-role progress tracking
+- **Management group scope** — activate roles at management group level (CLI only, with `--mg`; the TUI has no management-group picker)
+- **Batch activation** — all selected roles are submitted in one go, one after another (not in parallel), with per-role progress tracking
 - **Non-interactive CLI mode** — skip the TUI with `-r`/`--reason` for scripting and automation
 - **Dry-run mode** — simulate activation without making any real API calls
-- **Cached Entra token** — device code sign-in only required once; refresh token stored at `~/.cache/fomo/graph_token.json`
+- **Cached Entra token** — the Microsoft Graph refresh token is cached at `~/.cache/fomo/graph_token.json`, so the device code sign-in is only needed again when that refresh token expires
+- **Blast-radius tiers** — roles are tagged with their privilege tier from the public [azure-tiering](https://github.com/emiliensocchi/azure-tiering) data set
 - **Verbose logging** — write full API call/response logs to a file for troubleshooting
 
 ## Screenshots
@@ -30,6 +31,17 @@ A terminal UI for activating Azure PIM eligible roles with multiselect.
 ### Entra roles tab
 
 ![Entra roles screen](docs/screenshots/04-entra.svg)
+
+## Authentication
+
+fomo uses two separate sign-ins:
+
+- **Azure RBAC (ARM) calls** go through `az rest` and use your existing `az login` session. fomo never sees those credentials.
+- **Entra roles** are managed through Microsoft Graph, which needs a scope that the `az` first-party app doesn't have. fomo runs its own OAuth 2.0 device code sign-in for this and caches the resulting refresh token in `~/.cache/fomo/graph_token.json` (mode `0600`). Later runs reuse it silently. When the refresh token expires, the device code prompt comes back. To force a fresh sign-in (for example to switch account or tenant), delete that file.
+
+## Network access
+
+Besides Azure Resource Manager and Microsoft Graph, fomo downloads blast-radius tier data from the public [`emiliensocchi/azure-tiering`](https://github.com/emiliensocchi/azure-tiering) GitHub repository (via `raw.githubusercontent.com`). The data is cached for 7 days in `~/.cache/fomo/` (`tiering_azure.json`, `tiering_entra.json`).
 
 ## Platform support
 
@@ -85,14 +97,20 @@ fomo
 
 1. Select a subscription scope
 2. Multiselect the eligible roles to activate
-3. Enter a justification and confirm — activation runs in parallel
+3. Enter a justification and confirm — the roles are activated one after another, each with its own status row
 
 ### Entra roles
 
 1. Switch to the **Entra** tab with `l` (or left/right arrow keys on the tab bar)
-2. The app fetches your eligible directory roles via Microsoft Graph (first use requires a **device code** browser sign-in)
+2. The app fetches your eligible directory roles via Microsoft Graph (first use, and any use after the cached refresh token has expired, requires a **device code** browser sign-in; see [Authentication](#authentication))
 3. Multiselect the roles to activate (already-active roles are marked)
 4. Choose a duration, enter a justification, and confirm
+
+`fomo --entra` opens the TUI directly on the Entra tab.
+
+Press `i` on the first screen to see your currently active Azure and Entra assignments.
+
+Management-group activation isn't available in the TUI; use the CLI's `--mg` (see below).
 
 **Dry-run mode** (no real API calls):
 
@@ -110,7 +128,16 @@ Logs include all `az rest` and Graph API calls and responses. Useful for trouble
 
 ### Non-interactive (CLI) mode
 
-Skip the TUI entirely by providing `-r`/`--reason` on the command line. Role and subscription names accept substrings; the first exact match wins, otherwise the first substring match.
+Skip the TUI entirely by providing `-r`/`--reason` on the command line.
+
+Matching rules:
+
+- **Roles:** an exact role name (case-insensitive) wins. Otherwise every role whose name contains the text is activated.
+- **Subscriptions:** match by name substring or exact ID (both case-insensitive), and every matching subscription is used. Roles inherited from a parent management group (scoped outside the matched subscriptions) are skipped.
+- **Management groups (`--mg`):** match by display-name substring or exact ID (case-insensitive); if more than one group matches, fomo exits with an error. Roles inherited from a parent management group are kept.
+- Roles that are already active are skipped.
+
+Matching roles are activated one after another, not in parallel.
 
 **Azure RBAC (subscription scope)** — provide `SUBSCRIPTION` and `ROLE` as positional arguments:
 
@@ -133,6 +160,8 @@ fomo --entra "Global Reader" -r "Audit review" -t 1h
 The `-t`/`--time` flag accepts ISO 8601 durations (`PT1H`, `PT30M`) or shorthand (`1h`, `30m`). Defaults to `PT1H`.
 
 All three forms respect `--dry-run` to simulate activation without API calls.
+
+> **Warning:** `--demo` only affects the TUI. Combined with `-r`/`--reason` it is currently ignored, so the command talks to Azure and **performs a real activation**. Use `--dry-run` to simulate a CLI activation.
 
 ## Development
 
