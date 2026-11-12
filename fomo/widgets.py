@@ -18,8 +18,15 @@ BUTTON_LEFT = "▐"
 BUTTON_RIGHT = "▌"
 
 
+_BOLD = Style(bold=True)
+
+
 class FomoSelectionList(SelectionList):
     """SelectionList that uses ○/◉ to distinguish unselected/selected.
+
+    A selected row also has bold text and a bold ◉ in the success colour (see
+    ``app.tcss``), so it stands out from the rest of the list, not only by
+    its one-cell toggle.
 
     A list that gains focus, or is filled while it has focus, highlights its
     first selectable row, so the first Space toggles something.  A list filled
@@ -70,6 +77,11 @@ class FomoSelectionList(SelectionList):
         button_style += Style(meta={"option": selection_index})
 
         inner = "◉" if is_selected else "○"
+        segments: Iterable[Segment] = line
+        if is_selected:
+            button_style += _BOLD
+            # Over the row's own styles, so that nothing in the prompt turns it off.
+            segments = Segment.apply_style(line, post_style=_BOLD)
 
         return Strip(
             [
@@ -77,6 +89,6 @@ class FomoSelectionList(SelectionList):
                 Segment(inner, style=button_style),
                 Segment(BUTTON_RIGHT, style=side_style),
                 Segment(" ", style=underlying_style),
-                *line,
+                *segments,
             ]
         )

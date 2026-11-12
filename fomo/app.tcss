@@ -81,21 +81,24 @@ SelectionList {
     border: round $panel;
 }
 
-/* SelectionList checkbox contrast fix (dark + light mode) */
+/* SelectionList toggle colours, all readable on the $panel toggle background
+   in both themes.  $text-success is the success colour adjusted for
+   legibility: plain $success on $panel is only 3.6:1 in the light theme.
+   FomoSelectionList also makes a selected row's ◉ and text bold. */
 SelectionList > .selection-list--button {
     color: $text-muted;
 }
 
 SelectionList > .selection-list--button-highlighted {
-    color: $block-cursor-foreground;
+    color: $text;
 }
 
 SelectionList > .selection-list--button-selected {
-    color: $success;
+    color: $text-success;
 }
 
 SelectionList > .selection-list--button-selected-highlighted {
-    color: $success;
+    color: $text-success;
 }
 
 /* Roles screen */
