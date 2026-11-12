@@ -41,7 +41,7 @@ fomo uses two separate sign-ins:
 
 ## Network access
 
-Besides Azure Resource Manager and Microsoft Graph, fomo downloads blast-radius tier data from the public [`emiliensocchi/azure-tiering`](https://github.com/emiliensocchi/azure-tiering) GitHub repository (via `raw.githubusercontent.com`). The data is cached for 7 days in `~/.cache/fomo/` (`tiering_azure.json`, `tiering_entra.json`). Tier data is optional: if it can't be loaded, roles still load without tier badges. Demo mode (`--demo`) makes no network calls and uses only that cache.
+Besides Azure Resource Manager and Microsoft Graph, fomo downloads blast-radius tier data from the public [`emiliensocchi/azure-tiering`](https://github.com/emiliensocchi/azure-tiering) GitHub repository (via `raw.githubusercontent.com`). The data is cached for 7 days in `~/.cache/fomo/` (`tiering_azure.json`, `tiering_entra.json`). If a refresh fails, for example offline, fomo keeps using the older cached copy. Tier data is optional: if it can't be loaded, roles still load without tier badges. Demo mode (`--demo`) makes no network calls and uses only that cache.
 
 ## Platform support
 
