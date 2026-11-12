@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.17.0](https://github.com/jvik/fomo/compare/v1.16.0...v1.17.0) (2026-11-12)
+
+
+### Features
+
+* **tui:** FOMO_THEME override, ctrl+t toggle, non-blocking theme detection ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tui:** keyboard help panel on every screen ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tui:** make selected rows stand out ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tui:** next steps after activation (retry failed, assignments, quit) ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tui:** readable activation status and error details ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tui:** recent activations for one-key re-activation ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tui:** retry after re-login from the auth error dialog ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tui:** rework activation screen layout for small terminals ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tui:** show time left on active roles and assignments ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+
+
+### Bug Fixes
+
+* **azure:** log failed active-assignment lookups ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **azure:** look up the signed-in user once per process ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **entra:** harden device-code polling and browser launch ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **entra:** serialize Graph token acquisition ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **security:** keep tokens and profile data out of --log and create it 0600 ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **security:** tighten permissions of existing token cache and log files ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **security:** write the Graph token cache privately and atomically ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tiering:** skip malformed entries, write the cache atomically, fall back to stale data ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tui:** accurate counts, display-order activation, persistent load-failure status ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tui:** distinguish expired sessions from MFA and consent errors ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tui:** never let tiering data break role loading ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+* **tui:** render Azure names, errors and tier text literally ([49d61f5](https://github.com/jvik/fomo/commit/49d61f5452328ff5a9042a434ac0d22004d80def))
+
 ## [1.16.0](https://github.com/jvik/fomo/compare/v1.15.1...v1.16.0) (2026-10-13)
 
 
