@@ -381,7 +381,11 @@ def list_eligible_roles_mg(mg_id: str) -> list[EligibleRole]:
 
 
 def _list_active_role_keys(scope: str) -> frozenset[tuple[str, str]]:
-    """Return a set of (role_definition_id, scope) for currently active PIM assignments."""
+    """Return a set of (role_definition_id, scope) for currently active PIM assignments.
+
+    A failed lookup returns an empty set, so every role is listed as not
+    active; the failure is logged as a warning.
+    """
     url = (
         f"https://management.azure.com{scope}"
         f"/providers/Microsoft.Authorization/roleAssignmentScheduleInstances"
@@ -389,7 +393,8 @@ def _list_active_role_keys(scope: str) -> frozenset[tuple[str, str]]:
     )
     try:
         data = _run_az("rest", "--method", "GET", "--url", url)
-    except RuntimeError:
+    except RuntimeError as exc:
+        log.warning("could not read active assignments for %s: %s", scope, exc)
         return frozenset()
     keys: set[tuple[str, str]] = set()
     for item in data.get("value", []):
@@ -770,7 +775,11 @@ def _run_graph(method: str, url: str, body: str | None = None) -> Any:
 
 
 def _list_active_entra_role_def_ids(principal_id: str) -> frozenset[str]:
-    """Return role definition IDs currently PIM-activated in Entra for *principal_id*."""
+    """Return role definition IDs currently PIM-activated in Entra for *principal_id*.
+
+    A failed lookup returns an empty set, so every role is listed as not
+    active; the failure is logged as a warning.
+    """
     filter_val = urllib.parse.quote(
         f"principalId eq '{principal_id}' and assignmentType eq 'Activated'",
         safe="'()",
@@ -778,7 +787,8 @@ def _list_active_entra_role_def_ids(principal_id: str) -> frozenset[str]:
     url = f"{_GRAPH}/v1.0/roleManagement/directory/roleAssignmentScheduleInstances?$filter={filter_val}"
     try:
         data = _run_graph("GET", url)
-    except RuntimeError:
+    except RuntimeError as exc:
+        log.warning("could not read active assignments for Entra roles: %s", exc)
         return frozenset()
     return frozenset(item.get("roleDefinitionId", "") for item in data.get("value", []))
 

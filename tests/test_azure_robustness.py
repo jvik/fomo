@@ -3,15 +3,21 @@
 - F16: the signed-in user's ID is looked up once per process, not once per
   subscription (each lookup is an ``az`` process), and the roles screen loads
   at most four subscriptions at a time instead of all of them at once.
+- F17: a failed lookup of the active assignments still lists every role as
+  not active, but now says so in the log.
 """
 
 from __future__ import annotations
 
 import asyncio
+import email.message
+import io
 import json
+import logging
 import subprocess
 import threading
 import time
+import urllib.error
 from collections.abc import Callable
 from typing import Any
 
@@ -213,3 +219,71 @@ def test_roles_screen_loads_at_most_four_subscriptions_at_once(
     assert MAX_PARALLEL_LOADS == 4
     assert loader.max_inside == 4
     assert sorted(loader.calls) == subs
+
+
+# ---------------------------------------------------------------------------
+# F17: logged active-assignment lookups
+# ---------------------------------------------------------------------------
+
+ARM_DENIED = "ERROR: (AuthorizationFailed) The client does not have authorization to perform action 'read'."
+
+
+def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.name == "fomo.azure" and r.levelno == logging.WARNING]
+
+
+@pytest.mark.parametrize(
+    ("load", "scope"),
+    [
+        (lambda: azure.list_eligible_roles("s1"), "/subscriptions/s1"),
+        (lambda: azure.list_eligible_roles_mg("corp"), "/providers/Microsoft.Management/managementGroups/corp"),
+    ],
+    ids=["subscription", "management-group"],
+)
+def test_failed_arm_active_lookup_is_logged(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    load: Callable[[], list[EligibleRole]],
+    scope: str,
+) -> None:
+    def _respond(cmd: list[str]) -> tuple[int, Any, str]:
+        if cmd[1] == "rest" and "/roleAssignmentScheduleInstances" in cmd[cmd.index("--url") + 1]:
+            return 1, None, ARM_DENIED
+        return _arm(cmd)
+
+    _fake_az(monkeypatch, _respond)
+    caplog.set_level(logging.WARNING, logger="fomo.azure")
+
+    roles = load()
+
+    assert [(r.role_name, r.scope, r.is_active) for r in roles] == [("Reader", scope, False)]
+    assert _warnings(caplog) == [f"could not read active assignments for {scope}: {ARM_DENIED}"]
+
+
+class _Response(io.BytesIO):
+    """What ``urlopen`` returns: a readable context manager."""
+
+
+def _http_error(url: str, code: int, body: bytes) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(url, code, "error", email.message.Message(), io.BytesIO(body))
+
+
+def test_failed_entra_active_lookup_is_logged(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    _fake_az(monkeypatch, _arm)
+    monkeypatch.setattr(azure, "_get_graph_token", lambda *a, **k: "tok")
+    eligible = {"value": [{"roleDefinitionId": "gr", "id": "e1", "roleDefinition": {"displayName": "Global Reader"}}]}
+
+    def _urlopen(req: Any, *args: Any, **kwargs: Any) -> _Response:
+        if "/roleAssignmentScheduleInstances" in req.full_url:
+            raise _http_error(req.full_url, 403, b'{"error": {"message": "Insufficient privileges."}}')
+        return _Response(json.dumps(eligible).encode())
+
+    monkeypatch.setattr(azure.urllib.request, "urlopen", _urlopen)
+    caplog.set_level(logging.WARNING, logger="fomo.azure")
+
+    roles = azure.list_entra_eligible_roles()
+
+    assert [(r.role_name, r.is_active) for r in roles] == [("Global Reader", False)]
+    assert _warnings(caplog) == ["could not read active assignments for Entra roles: Insufficient privileges."]
