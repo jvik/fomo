@@ -34,11 +34,11 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.coordinate import Coordinate
 from textual.events import Resize
 from textual.notifications import SeverityLevel
-from textual.screen import Screen
 from textual.widget import Widget
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog, Select
 
 from fomo import azure, tiering
+from fomo.screens._common import FomoScreen
 
 _DURATION_OPTIONS: list[tuple[str, str]] = [
     ("30 min", "PT30M"),
@@ -280,7 +280,7 @@ class RolesScroll(VerticalScroll):
         self.can_focus = overflows
 
 
-class ActivationScreenBase(Screen[ActivationResult[RoleT] | None], Generic[RoleT]):
+class ActivationScreenBase(FomoScreen[ActivationResult[RoleT] | None], Generic[RoleT]):
     """Justification form plus per-role activation progress."""
 
     # Enter, r, i and q (Quit) only apply once a run has finished, and the two

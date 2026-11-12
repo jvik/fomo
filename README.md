@@ -110,6 +110,8 @@ fomo
 
 Press `i` on the first screen to see your currently active Azure and Entra assignments.
 
+Press `?` on any screen to see all of its keys, including those the footer has no room for (`F1` while typing in a field). `ctrl+c` quits from anywhere.
+
 Management-group activation isn't available in the TUI; use the CLI's `--mg` (see below).
 
 **Dry-run mode** (no real API calls):

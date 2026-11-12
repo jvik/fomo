@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, TypeVar
 
+from textual.binding import ActiveBinding, Binding, BindingType
 from textual.content import Content
+from textual.screen import Screen
 from textual.widget import Widget
 
 from fomo import timefmt
@@ -85,11 +87,44 @@ class _HasFocus(Protocol):
     def focused(self) -> Widget | None: ...
 
 
+ScreenResultT = TypeVar("ScreenResultT")
+
+
+class FomoScreen(Screen[ScreenResultT]):
+    """A screen whose footer lists the app-wide keys (Quit, Keys) last.
+
+    Textual orders the footer by where each key is first bound.  ctrl+c is
+    first bound by the screen itself (copy) or by a focused text field, so
+    the app's "^c Quit" would otherwise turn up anywhere in the footer.
+    """
+
+    @property
+    def active_bindings(self) -> dict[str, ActiveBinding]:
+        bindings = super().active_bindings
+        app = self.app
+        screen_keys = {key: active for key, active in bindings.items() if active.node is not app}
+        return screen_keys | {key: active for key, active in bindings.items() if active.node is app}
+
+
+# Binding groups: the Keys screen (?) lists the keys of a group on one row.
+MOVE = Binding.Group("Move")
+TOP_BOTTOM = Binding.Group("Top / Bottom")
+TABS = Binding.Group("Tabs")
+
+#: The ``j``/``k``/``g``/``G`` bindings of a screen with :class:`VimNavMixin`.
+VIM_BINDINGS: list[BindingType] = [
+    Binding("j", "vim_down", "Down", show=False, group=MOVE),
+    Binding("k", "vim_up", "Up", show=False, group=MOVE),
+    Binding("g", "vim_top", "Top", show=False, group=TOP_BOTTOM),
+    Binding("G", "vim_bottom", "Bottom", show=False, group=TOP_BOTTOM),
+]
+
+
 class VimNavMixin:
     """``vim_down``/``vim_up``/``vim_top``/``vim_bottom`` actions for a Screen.
 
     Each action forwards to the focused widget if it supports the movement.
-    The screen still declares its own ``j``/``k``/``g``/``G`` bindings.
+    The screen still declares the bindings, usually with ``*VIM_BINDINGS``.
     """
 
     def action_vim_down(self: _HasFocus) -> None:

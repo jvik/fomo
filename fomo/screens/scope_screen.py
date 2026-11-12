@@ -10,7 +10,6 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.content import Content
-from textual.screen import Screen
 from textual.widgets import (
     Footer,
     Header,
@@ -25,6 +24,10 @@ from textual.widgets.selection_list import Selection
 
 from fomo import azure, tiering, timefmt
 from fomo.screens._common import (
+    MOVE,
+    TABS,
+    VIM_BINDINGS,
+    FomoScreen,
     VimNavMixin,
     device_code_markup,
     role_detail_state,
@@ -41,7 +44,7 @@ MAX_SUBSCRIPTIONS = 3
 ENTRA_SORT_MODES = ("name", "tier", "expiry")
 
 
-class ScopeScreen(VimNavMixin, Screen):
+class ScopeScreen(VimNavMixin, FomoScreen):
     """First screen: select Azure subscriptions or Entra roles."""
 
     BINDINGS = [
@@ -51,21 +54,19 @@ class ScopeScreen(VimNavMixin, Screen):
         Binding("enter", "to_list", "To list", show=True, priority=True),
         Binding("enter", "proceed", "Proceed", show=True, priority=True),
         Binding("slash", "focus_filter", "Filter", show=True),
-        Binding("escape", "escape_key", "Back to filter", show=False, priority=True),
+        Binding("escape", "escape_key", "Filter ↔ list", show=False, priority=True),
         Binding("a", "select_all", "All", show=True),
         Binding("n", "select_none", "None", show=True),
         Binding("ctrl+s", "cycle_sort", "Sort", show=True, priority=True),
         Binding("i", "open_assignments", "Assignments", show=True),
         Binding("q", "quit_app", "Quit", show=True),
-        Binding("up", "arrow_up", "↑", show=False),
-        Binding("down", "arrow_down", "↓", show=False),
-        Binding("h", "prev_tab", "← Tab", show=False),
-        Binding("l", "next_tab", "→ Tab", show=False),
-        Binding("j", "vim_down", "↓", show=False),
-        Binding("k", "vim_up", "↑", show=False),
-        Binding("g", "vim_top", "Top", show=False),
-        Binding("G", "vim_bottom", "Bottom", show=False),
+        # Hidden from the footer; the Keys screen (?) lists them.
         Binding("x", "select_focused", "Toggle", show=False, priority=True),
+        Binding("h", "prev_tab", "Previous tab", show=False, group=TABS),
+        Binding("l", "next_tab", "Next tab", show=False, group=TABS),
+        Binding("up", "arrow_up", "Up", show=False, group=MOVE),
+        Binding("down", "arrow_down", "Down", show=False, group=MOVE),
+        *VIM_BINDINGS,
     ]
 
     def __init__(self, initial_tab: str = "tab-azure") -> None:

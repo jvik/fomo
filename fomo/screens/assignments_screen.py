@@ -10,14 +10,21 @@ from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.content import Content
-from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Label, LoadingIndicator, TabbedContent, TabPane
 from textual.widgets.data_table import ColumnKey
 
 from fomo import azure, timefmt
-from fomo.screens._common import VimNavMixin, device_code_markup, safe_markup, wrap_error_lines
+from fomo.screens._common import (
+    VIM_BINDINGS,
+    FomoScreen,
+    VimNavMixin,
+    device_code_markup,
+    safe_markup,
+    wrap_error_lines,
+)
 
 _COL_NAMES = ("Role", "Scope", "Expiry", "Type")
+_SORT = Binding.Group("Sort by column", compact=True)
 
 # How the Entra tab shows the tenant-wide directory scope "/".
 _DIRECTORY_SCOPE = "Directory"
@@ -52,20 +59,18 @@ _SESSION_EXPIRED = (
 )
 
 
-class AssignmentsScreen(VimNavMixin, Screen):
+class AssignmentsScreen(VimNavMixin, FomoScreen):
     """Show all currently active Azure ARM and Entra role assignments."""
 
     BINDINGS = [
         Binding("escape", "app.pop_screen", "Back", show=True),
         Binding("q", "app.pop_screen", "Back", show=False),
-        Binding("j", "vim_down", "↓", show=False),
-        Binding("k", "vim_up", "↑", show=False),
-        Binding("g", "vim_top", "Top", show=False),
-        Binding("G", "vim_bottom", "Bottom", show=False),
-        Binding("1", "sort_col(0)", "Sort: Role", show=True),
-        Binding("2", "sort_col(1)", "Sort: Scope", show=True),
-        Binding("3", "sort_col(2)", "Sort: Expiry", show=True),
-        Binding("4", "sort_col(3)", "Sort: Type", show=True),
+        *VIM_BINDINGS,
+        # One footer entry, "1234 Sort", so that Quit still fits at 80 columns.
+        Binding("1", "sort_col(0)", "Sort: Role", show=True, group=_SORT),
+        Binding("2", "sort_col(1)", "Sort: Scope", show=True, group=_SORT),
+        Binding("3", "sort_col(2)", "Sort: Expiry", show=True, group=_SORT),
+        Binding("4", "sort_col(3)", "Sort: Type", show=True, group=_SORT),
         Binding("r", "reload", "Reload", show=True),
     ]
 

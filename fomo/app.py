@@ -7,7 +7,9 @@ import subprocess
 from collections.abc import Callable
 
 from textual import events, on
+from textual.actions import SkipAction
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.theme import Theme
@@ -17,6 +19,7 @@ from textual.worker import get_current_worker
 from fomo import azure
 from fomo.backend import Backend, make_backend
 from fomo.screens._common import safe_markup
+from fomo.screens.keys_screen import KeysScreen, binding_rows, screen_key_rows
 from fomo.screens.scope_screen import ScopeScreen
 
 FOMO_DARK = Theme(
@@ -264,7 +267,18 @@ class PimApp(App):
     CSS_PATH = "app.tcss"
     TITLE = "fomo  ·  Azure PIM"
     ENABLE_COMMAND_PALETTE = False
-    BINDINGS = [("ctrl+c", "quit", "Quit")]
+    BINDINGS = [
+        # A focused text field types "?", so F1 opens the Keys screen too.  Both
+        # run the same action, and the footer shows the first one that applies.
+        Binding("question_mark", "show_keys", "Keys"),
+        Binding("f1", "show_keys", "Keys", key_display="F1", priority=True),
+        # ctrl+c always quits (unless there is selected text to copy).  The
+        # first binding puts it in the footer wherever q doesn't quit: while
+        # typing, and on screens where q goes back.  Otherwise it is disabled
+        # and the hidden second one quits.
+        Binding("ctrl+c", "quit_ctrl_c", "Quit", priority=True),
+        Binding("ctrl+c", "quit", "Quit", show=False),
+    ]
 
     def __init__(self, dry_run: bool = False, entra: bool = False, demo_mode: bool = False) -> None:
         super().__init__()
@@ -341,6 +355,42 @@ class PimApp(App):
                     callback()
 
         self.push_screen(modal, _closed)
+
+    # ------------------------------------------------------------------
+    # App-wide keys: ? / F1 (Keys) and ctrl+c (Quit)
+    # ------------------------------------------------------------------
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "quit_ctrl_c":
+            return not self._q_quits()
+        return super().check_action(action, parameters)
+
+    def _q_quits(self) -> bool:
+        """Whether q quits right now: not typed into a field, and bound to quit on this screen."""
+        screen = self.screen
+        focused = screen.focused
+        if focused is not None and focused.check_consume_key("q", "q"):
+            return False
+        for binding in Binding.make_bindings(type(screen).BINDINGS):
+            # The first q binding that applies is the one q runs.
+            if binding.key == "q" and screen.check_action(binding.action, ()) is True:
+                return binding.action == "quit_app"
+        return False
+
+    def action_quit_ctrl_c(self) -> None:
+        """ctrl+c: quit, unless there is selected text, which ctrl+c then copies."""
+        focused = self.focused
+        if getattr(focused, "selected_text", "") or self.screen.get_selected_text():
+            raise SkipAction()
+        self.exit()
+
+    def action_show_keys(self) -> None:
+        """? or F1: open the Keys screen for the current screen (F1 again closes it)."""
+        screen = self.screen
+        if isinstance(screen, KeysScreen):
+            screen.dismiss()
+            return
+        self.push_screen(KeysScreen(screen_key_rows(screen), binding_rows(type(self).BINDINGS)))
 
     def on_unmount(self) -> None:
         if self._color_scheme_proc is not None:

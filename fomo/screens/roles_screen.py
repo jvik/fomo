@@ -9,12 +9,19 @@ from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.screen import ModalScreen, Screen
+from textual.screen import ModalScreen
 from textual.widgets import Button, Footer, Header, Input, Label, LoadingIndicator
 from textual.widgets.selection_list import Selection
 
 from fomo import azure, tiering, timefmt
-from fomo.screens._common import VimNavMixin, role_detail_state, role_list_prompt, safe_markup
+from fomo.screens._common import (
+    VIM_BINDINGS,
+    FomoScreen,
+    VimNavMixin,
+    role_detail_state,
+    role_list_prompt,
+    safe_markup,
+)
 from fomo.widgets import FomoSelectionList as SelectionList
 
 if TYPE_CHECKING:
@@ -79,7 +86,7 @@ def _short_error(message: str, limit: int = _LOAD_ERROR_LIMIT) -> str:
     return message if len(message) <= limit else message[: limit - 1] + "…"
 
 
-class RolesScreen(VimNavMixin, Screen):
+class RolesScreen(VimNavMixin, FomoScreen):
     """Fuzzy-filter and multiselect eligible PIM roles."""
 
     BINDINGS = [
@@ -91,17 +98,16 @@ class RolesScreen(VimNavMixin, Screen):
         Binding("escape", "app.pop_screen", "Back", show=True, priority=True),
         Binding("q", "app.pop_screen", "Back", show=False),
         Binding("tab", "focus_list", "Next box", show=True),
-        Binding("shift+tab", "focus_filter", "Prev box", show=True),
+        # Hidden so that Quit and Keys still fit the footer at 80 columns.
+        Binding("shift+tab", "focus_filter", "Prev box", show=False),
         Binding("slash", "focus_filter", "Filter", show=False),
         Binding("a", "select_all_visible", "All", show=True),
         # Only while subscriptions failed to load; the status line says so.
         Binding("e", "show_load_errors", "Load errors", show=False),
         Binding("ctrl+s", "cycle_sort", "Sort", show=True, priority=True),
-        Binding("j", "vim_down", "↓", show=False),
-        Binding("k", "vim_up", "↑", show=False),
-        Binding("g", "vim_top", "Top", show=False),
-        Binding("G", "vim_bottom", "Bottom", show=False),
+        # Hidden from the footer; the Keys screen (?) lists them.
         Binding("x", "select_focused", "Toggle", show=False, priority=True),
+        *VIM_BINDINGS,
     ]
 
     def __init__(self, subscription_ids: list[str], subscription_names: dict[str, str] | None = None) -> None:

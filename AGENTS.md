@@ -49,8 +49,9 @@ fomo/
     activation_screen.py  # Step 3 — Azure justification form + per-role progress table
     entra_screen.py    # Entra activation screen
     assignments_screen.py  # Currently active Azure and Entra assignments (`i`)
+    keys_screen.py     # Keys screen (`?`/F1), generated from the current screen's bindings
     _activation_base.py    # Shared logic for the Azure and Entra activation screens
-    _common.py         # Shared screen helpers (safe_markup, Vim navigation, device-code markup, error wrapping)
+    _common.py         # Shared screen helpers (FomoScreen base, safe_markup, Vim navigation and bindings, device-code markup, error wrapping)
 hatch_build.py         # Hatchling build hook: generates man/fomo.1 from build_parser()
 man/fomo.1.include     # Hand-written man page sections (argparse-manpage include format)
 scripts/screenshot.py  # Regenerates docs/screenshots/*.svg in demo mode

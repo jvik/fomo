@@ -102,10 +102,23 @@ Entra role assignments, on separate \fBAzure\fR and \fBEntra\fR tabs.
 The Entra tab may require the device-code sign-in.
 
 [KEY BINDINGS]
-Key bindings are shown in the footer of each screen and differ slightly
-between screens.
+The footer of each screen shows its main keys, which differ slightly
+between screens; \fB?\fR lists all of them.
 Letter keys act on the list; while a filter or text input has focus they
 are typed into it instead.
+.SS All screens
+.TP
+.BR ? \ /\  F1
+Show the keys of the current screen, including those the footer has no
+room for, and the keys that work everywhere.
+Keys that don't apply at the moment are dimmed.
+\fBEscape\fR or \fB?\fR closes the list.
+While typing in a field, \fB?\fR is typed; use \fBF1\fR there.
+.TP
+.B Ctrl\-c
+Quit (with text selected, copy it instead).
+The footer shows it wherever \fBq\fR doesn't quit: while typing in a
+field, and on screens where \fBq\fR goes back.
 .SS Subscription and Entra tab screen
 .TP
 .B Enter
