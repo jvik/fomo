@@ -18,6 +18,7 @@ from textual.pilot import Pilot
 from textual.widgets import Button, DataTable, Input, TabbedContent, Tabs
 
 from fomo import app as app_module
+from fomo import demo
 from fomo.app import AuthErrorModal, PimApp
 from fomo.screens.activation_screen import ActivationScreen
 from fomo.screens.assignments_screen import AssignmentsScreen
@@ -145,6 +146,8 @@ def test_roles_screen_disables_active_role_and_cycles_sort(make_app, tiering_fix
             roles = await _open_roles(pilot)
             screen = app.screen
             assert isinstance(screen, RolesScreen)
+            # The scope screen passes the subscription names on, for the "e" dialog.
+            assert screen._sub_names == {sub.id: sub.name for sub in demo.SUBSCRIPTIONS}
 
             contributor = [
                 roles.get_option_at_index(i)

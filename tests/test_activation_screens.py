@@ -506,7 +506,8 @@ def test_retry_failed_assignments_and_done_after_a_run(make_live_app, fake_azure
             screen.query_one("#justification", Input).value = "why"
             await pilot.press("enter")
             await _wait_done(pilot, screen)
-            assert [name for name, *_ in fake_azure.activations] == ["Reader", "Key Vault Reader"]
+            # In the roles list's order (by name), not the order they were loaded in.
+            assert [name for name, *_ in fake_azure.activations] == ["Key Vault Reader", "Reader"]
             await wait_for(pilot, lambda: "1 activated · 1 failed — see Details below." in _toasts(app))
             btn_activate = screen.query_one("#btn-activate", Button)
             assert str(btn_activate.label) == "Retry failed (1)"

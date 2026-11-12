@@ -583,7 +583,8 @@ class ScopeScreen(VimNavMixin, Screen):
                 return
             from fomo.screens.roles_screen import RolesScreen
 
-            self.app.push_screen(RolesScreen(selected_ids))
+            names = {sub.id: sub.name for sub in self._all_subs}
+            self.app.push_screen(RolesScreen(selected_ids, names))
 
     def _after_entra_activation(self, result: ActivationResult[azure.EntraEligibleRole] | None) -> None:
         """Back on the Entra tab from the Entra activation screen (Done or Escape).

@@ -47,6 +47,52 @@ AuthErrorModal {
     width: 1fr;
 }
 
+/* Roles screen "e": the subscriptions that failed to load.  The list
+   scrolls, so the dialog fits an 80x24 terminal however many failed. */
+LoadErrorsModal {
+    align: center middle;
+}
+
+#load-errors-dialog {
+    background: $surface;
+    border: thick $warning;
+    padding: 1 2;
+    width: 72;
+    max-width: 100%;
+    height: auto;
+    max-height: 100%;
+}
+
+#load-errors-title {
+    width: 1fr;
+    text-style: bold;
+    color: $text-warning;
+    margin-bottom: 1;
+}
+
+#load-errors-list {
+    height: auto;
+    max-height: 12;
+}
+
+.load-error {
+    width: 1fr;
+    margin-bottom: 1;
+}
+
+#load-errors-buttons {
+    height: auto;
+}
+
+#load-errors-retry {
+    width: 1fr;
+    margin-right: 1;
+}
+
+#load-errors-close {
+    width: 1fr;
+}
+
 Screen {
     background: $surface;
 }
@@ -69,8 +115,10 @@ Header {
     text-style: italic;
 }
 
+/* One line, two while subscriptions failed to load ("⚠ … · e details"). */
 #status {
-    height: 1;
+    height: auto;
+    max-height: 2;
     color: $text-muted;
     margin-top: 1;
 }

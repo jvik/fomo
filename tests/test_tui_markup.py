@@ -32,7 +32,7 @@ from fomo.screens._common import device_code_markup, safe_markup
 from fomo.screens.activation_screen import ActivationScreen
 from fomo.screens.assignments_screen import AssignmentsScreen
 from fomo.screens.entra_screen import EntraActivationScreen
-from fomo.screens.roles_screen import RolesScreen
+from fomo.screens.roles_screen import LoadErrorsModal, RolesScreen
 from fomo.screens.scope_screen import ScopeScreen
 from fomo.widgets import FomoSelectionList
 from tests.test_tui_smoke import SIZE, _prompts, _status_cells, wait_for
@@ -281,10 +281,21 @@ def test_roles_load_error_toast_renders_verbatim(make_live_app, fake_azure, monk
         app = make_live_app()
         async with app.run_test(size=SIZE, notifications=True) as pilot:
             await _scope_ready(pilot)
-            await app.push_screen(RolesScreen(["abcdef12-0000"]))
+            screen = RolesScreen(["abcdef12-0000"])
+            await app.push_screen(screen)
             await wait_for(pilot, lambda: _toasts(app))
             assert "[abcdef12…] bad [/] thing" in _toasts(app)
             assert app.return_code is None
+
+            # F36: the only subscription failed, which is not "no roles found";
+            # e lists it, with its error verbatim.
+            label = screen.query_one("#loading-label", Label)
+            await wait_for(pilot, lambda: "failed" in _text(label))
+            assert _text(label) == "⚠ 1 of 1 subscriptions failed · e details"
+            await pilot.press("e")
+            await wait_for(pilot, lambda: isinstance(app.screen, LoadErrorsModal))
+            errors = [_text(error) for error in app.screen.query(".load-error").results(Label)]
+            assert errors == ["abcdef12-0000\nbad [/] thing"]
 
     asyncio.run(scenario())
 

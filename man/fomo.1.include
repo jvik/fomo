@@ -156,6 +156,12 @@ Toggle the highlighted role.
 .B a
 Select all visible (filtered) roles.
 .TP
+.B e
+When some subscriptions failed to load, the status line under the list
+says how many (for example "2 of 5 subscriptions failed").
+\fBe\fR lists them with their errors, and \fBRetry\fR loads just those
+subscriptions again.
+.TP
 .B Ctrl\-s
 Cycle the sort order (name, scope, tier, expiry).
 Defaults to alphabetical.

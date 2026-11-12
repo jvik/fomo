@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
-from textual.widgets import Footer, Header, Input, Label, LoadingIndicator
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.screen import ModalScreen, Screen
+from textual.widgets import Button, Footer, Header, Input, Label, LoadingIndicator
 from textual.widgets.selection_list import Selection
 
 from fomo import azure, tiering, timefmt
@@ -25,6 +25,58 @@ SORT_MODES = ("name", "scope", "tier", "expiry")
 # Subscriptions whose roles load at the same time.  Each load runs a few `az`
 # processes, so fifty selected subscriptions must not start them all at once.
 MAX_PARALLEL_LOADS = 4
+# A load error is cut to this many characters in the load errors dialog.
+_LOAD_ERROR_LIMIT = 300
+
+
+class LoadErrorsModal(ModalScreen[bool]):
+    """The subscriptions whose roles failed to load, each with its error (``e``).
+
+    Dismisses with ``True`` for Retry (load just those subscriptions again)
+    and ``False`` for Close.
+    """
+
+    BINDINGS = [
+        Binding("escape", "close", "Close"),
+        Binding("r", "retry", "Retry"),
+    ]
+
+    def __init__(self, failures: list[tuple[str, str, str]]) -> None:
+        """*failures* holds ``(subscription name or "", subscription id, error)`` triples."""
+        super().__init__()
+        self.failures = failures
+
+    def compose(self) -> ComposeResult:
+        count = len(self.failures)
+        with Vertical(id="load-errors-dialog"):
+            yield Label(
+                f"{count} subscription{'' if count == 1 else 's'} failed to load",
+                id="load-errors-title",
+            )
+            with VerticalScroll(id="load-errors-list"):
+                for name, sub_id, error in self.failures:
+                    template = "[bold]$name[/bold]  [dim]$id[/dim]\n$error" if name else "[bold]$id[/bold]\n$error"
+                    yield Label(safe_markup(template, name=name, id=sub_id, error=error), classes="load-error")
+            with Horizontal(id="load-errors-buttons"):
+                yield Button("Retry", variant="primary", id="load-errors-retry")
+                yield Button("Close", id="load-errors-close")
+
+    def on_mount(self) -> None:
+        self.query_one("#load-errors-retry").focus()
+
+    @on(Button.Pressed, "#load-errors-retry")
+    def action_retry(self) -> None:
+        self.dismiss(True)
+
+    @on(Button.Pressed, "#load-errors-close")
+    def action_close(self) -> None:
+        self.dismiss(False)
+
+
+def _short_error(message: str, limit: int = _LOAD_ERROR_LIMIT) -> str:
+    """*message* without surrounding blank space, cut to *limit* characters."""
+    message = message.strip()
+    return message if len(message) <= limit else message[: limit - 1] + "…"
 
 
 class RolesScreen(VimNavMixin, Screen):
@@ -42,6 +94,8 @@ class RolesScreen(VimNavMixin, Screen):
         Binding("shift+tab", "focus_filter", "Prev box", show=True),
         Binding("slash", "focus_filter", "Filter", show=False),
         Binding("a", "select_all_visible", "All", show=True),
+        # Only while subscriptions failed to load; the status line says so.
+        Binding("e", "show_load_errors", "Load errors", show=False),
         Binding("ctrl+s", "cycle_sort", "Sort", show=True, priority=True),
         Binding("j", "vim_down", "↓", show=False),
         Binding("k", "vim_up", "↑", show=False),
@@ -50,9 +104,10 @@ class RolesScreen(VimNavMixin, Screen):
         Binding("x", "select_focused", "Toggle", show=False, priority=True),
     ]
 
-    def __init__(self, subscription_ids: list[str]) -> None:
+    def __init__(self, subscription_ids: list[str], subscription_names: dict[str, str] | None = None) -> None:
         super().__init__()
         self._sub_ids = subscription_ids
+        self._sub_names = subscription_names or {}
         self.all_roles: list[azure.EligibleRole] = []
         self._selected: set[int] = set()  # indices into all_roles
         self._visible_indices: set[int] = set()
@@ -61,6 +116,7 @@ class RolesScreen(VimNavMixin, Screen):
         self._rebuilding = False
         self._auth_error_shown = False
         self._auth_failed_subs: list[str] = []  # failed with an expired/missing session
+        self._failed_subs: dict[str, str] = {}  # subscription id → error of its last load, any kind
         self._sort_mode = SORT_MODES[0]
         # Shared by every subscription worker of this screen, retries included.
         self._load_slots = threading.BoundedSemaphore(MAX_PARALLEL_LOADS)
@@ -125,8 +181,10 @@ class RolesScreen(VimNavMixin, Screen):
         self._increment_loaded()
 
     def _on_roles_error(self, sub_id: str, msg: str) -> None:
-        # Only an expired or missing session opens the dialog, and only once;
-        # MFA, consent and other errors are reported for their subscription.
+        # Every failure stays in the status line ("e" lists them).  Only an
+        # expired or missing session opens the dialog, and only once; MFA,
+        # consent and other errors are reported for their subscription.
+        self._failed_subs[sub_id] = msg
         if azure.is_auth_error(msg):
             self._auth_failed_subs.append(sub_id)
             if not self._auth_error_shown:
@@ -142,13 +200,28 @@ class RolesScreen(VimNavMixin, Screen):
         """Reload the subscriptions that failed with a session error (Retry after re-login)."""
         failed, self._auth_failed_subs = self._auth_failed_subs, []
         self._auth_error_shown = False
-        if not failed or not self.is_attached:
+        # Those the load errors dialog has retried meanwhile are loading already.
+        self._reload_subs([sub_id for sub_id in failed if sub_id in self._failed_subs])
+
+    def _retry_all_failed_subs(self) -> None:
+        """Reload every subscription that failed, whatever the error (Retry in the ``e`` dialog)."""
+        self._auth_failed_subs = []
+        self._auth_error_shown = False
+        self._reload_subs(list(self._failed_subs))
+
+    def _reload_subs(self, sub_ids: list[str]) -> None:
+        """Load the roles of *sub_ids*, which have failed, again."""
+        if not sub_ids or not self.is_attached:
             return
-        self._loaded_count -= len(failed)
-        if not self.query_one("#split").display:
+        for sub_id in sub_ids:
+            self._failed_subs.pop(sub_id, None)
+        self._loaded_count -= len(sub_ids)
+        if self.query_one("#split").display:
+            self._update_status()
+        else:
             self.query_one("#spinner").display = True
             self.query_one("#loading-label", Label).update(f"Loading roles… {self._loaded_count}/{len(self._sub_ids)}")
-        for sub_id in failed:
+        for sub_id in sub_ids:
             self._load_roles_for_sub(sub_id)
 
     def _increment_loaded(self) -> None:
@@ -159,6 +232,14 @@ class RolesScreen(VimNavMixin, Screen):
         # All subscriptions have responded
         self.query_one("#spinner").display = False
         if not self.all_roles:
+            if self._failed_subs:
+                # Not "no roles found": some subscriptions could not be read at all.
+                others = "\n[dim]No eligible PIM roles in the others.[/dim]" if self._loaded_ok_count() else ""
+                self.query_one("#loading-label", Label).update(self._load_failure_markup() + others)
+                # The (hidden) filter has had focus since the screen opened;
+                # it would swallow the "e" the label asks for.
+                self.set_focus(None)
+                return
             self.query_one("#loading-label", Label).update(
                 "[dim]No eligible PIM roles found in the selected subscriptions.[/dim]"
             )
@@ -190,6 +271,17 @@ class RolesScreen(VimNavMixin, Screen):
     # List management
     # ------------------------------------------------------------------
 
+    def _loaded_ok_count(self) -> int:
+        """How many subscriptions have loaded without an error."""
+        return self._loaded_count - len(self._failed_subs)
+
+    def _load_failure_markup(self) -> str:
+        """E.g. "⚠ 2 of 5 subscriptions failed · e details" (no external text)."""
+        return (
+            f"[bold $text-warning]⚠ {len(self._failed_subs)} of {len(self._sub_ids)} subscriptions failed[/]"
+            " · [bold]e[/bold] details"
+        )
+
     def _sort_key(self, role: azure.EligibleRole) -> tuple:
         name = role.role_name.casefold()
         scope = role.scope_display_name.casefold()
@@ -202,6 +294,13 @@ class RolesScreen(VimNavMixin, Screen):
             return (role.expiry is None, role.expiry or "", name, scope)
         return (name, scope)
 
+    def _display_order(self) -> list[int]:
+        """Indices into all_roles in list order: subscription roles, then global ones, each sorted."""
+        ordered = sorted(range(len(self.all_roles)), key=lambda i: self._sort_key(self.all_roles[i]))
+        return [i for i in ordered if not self.all_roles[i].is_global] + [
+            i for i in ordered if self.all_roles[i].is_global
+        ]
+
     def _rebuild_list(self, query: str) -> None:
         sl = self.query_one("#role-list", SelectionList)
         self._rebuilding = True
@@ -210,7 +309,7 @@ class RolesScreen(VimNavMixin, Screen):
         self._option_values = []
         q = query.strip().lower()
 
-        ordered = sorted(enumerate(self.all_roles), key=lambda item: self._sort_key(item[1]))
+        ordered = [(i, self.all_roles[i]) for i in self._display_order()]
         sub_items = [(i, r) for i, r in ordered if not r.is_global]
         global_items = [(i, r) for i, r in ordered if r.is_global]
 
@@ -253,14 +352,18 @@ class RolesScreen(VimNavMixin, Screen):
             self.query_one("#detail", Label).update("[dim]No roles match filter.[/dim]")
 
     def _update_status(self) -> None:
+        """E.g. "2 selected · 5/7 shown · sort: name", plus a line about failed loads.
+
+        Shown counts every listed role, the active (disabled) ones included,
+        but not the global-assignments separator.
+        """
         n_sel = len(self._selected)
-        n_vis = len(self._visible_indices)
+        n_shown = sum(1 for value in self._option_values if value is not None)
         n_total = len(self.all_roles)
-        parts = [f"{n_sel} selected"]
-        if n_vis < n_total:
-            parts.append(f"{n_vis}/{n_total} shown")
-        parts.append(f"sort: {self._sort_mode}")
-        self.query_one("#status", Label).update("  ·  ".join(parts))
+        status = f"{n_sel} selected · {n_shown}/{n_total} shown · sort: {self._sort_mode}"
+        if self._failed_subs:
+            status += "\n" + self._load_failure_markup()
+        self.query_one("#status", Label).update(status)
 
     def _refresh_detail(self) -> None:
         """Re-render the detail pane for the highlighted (or first listed) role."""
@@ -386,7 +489,22 @@ class RolesScreen(VimNavMixin, Screen):
             return self._filter_has_focus()
         if action == "proceed":
             return not self._filter_has_focus()
+        if action == "show_load_errors":
+            return bool(self._failed_subs)
         return super().check_action(action, parameters)
+
+    def action_show_load_errors(self) -> None:
+        """e: list the subscriptions that failed to load; Retry loads just those again."""
+        failures = [
+            (self._sub_names.get(sub_id, ""), sub_id, _short_error(error))
+            for sub_id, error in self._failed_subs.items()
+        ]
+
+        def _closed(retry: bool | None) -> None:
+            if retry:
+                self._retry_all_failed_subs()
+
+        self.app.push_screen(LoadErrorsModal(failures), _closed)
 
     def action_to_list(self) -> None:
         """Enter in the filter: move focus to the list."""
@@ -399,12 +517,17 @@ class RolesScreen(VimNavMixin, Screen):
         self.query_one("#filter").focus()
 
     def action_select_all_visible(self) -> None:
-        """Select all currently visible (filtered) roles."""
+        """Select all currently visible (filtered) roles that can be activated.
+
+        Not SelectionList.select_all: that also selects the disabled rows (the
+        active roles and the global-assignments separator), and its
+        SelectedChanged arrives after any flag set around it is cleared.
+        """
         self._selected.update(self._visible_indices)
         sl = self.query_one("#role-list", SelectionList)
-        self._rebuilding = True
-        sl.select_all()
-        self._rebuilding = False
+        with sl.prevent(SelectionList.SelectedChanged):
+            for index in self._visible_indices:
+                sl.select(index)
         self._update_status()
 
     def action_proceed(self) -> None:
@@ -415,7 +538,8 @@ class RolesScreen(VimNavMixin, Screen):
             visible_unselected = self._visible_indices - set(sl.selected)
             self._selected -= visible_unselected
 
-        selected_roles = [self.all_roles[i] for i in sorted(self._selected)]
+        # In the order the list shows them, whatever order they were selected in.
+        selected_roles = [self.all_roles[i] for i in self._display_order() if i in self._selected]
         if not selected_roles:
             self.notify("Select at least one role.", severity="warning")
             return
