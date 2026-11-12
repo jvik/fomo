@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 
 from textual.content import Content
+from textual.widgets import Label
 
 from fomo.screens._common import device_code_markup, wrap_error_lines
+from fomo.screens.scope_screen import ScopeScreen
 from tests.test_activation_screens import make_app  # noqa: F401  (fixture)
 from tests.test_tui_smoke import SIZE, _subs_loaded
 
@@ -46,5 +48,25 @@ def test_vim_keys_move_the_focused_list(make_app) -> None:  # noqa: F811
             await pilot.press("k")
             await pilot.pause()
             assert subs.highlighted == 1
+
+    asyncio.run(scenario())
+
+
+def test_entra_error_wraps_each_long_line_on_its_own(make_app) -> None:  # noqa: F811
+    msg = "Graph request failed:\n" + "x" * 120 + "\nTrace ID: 1"
+
+    async def scenario() -> None:
+        app = make_app()
+        async with app.run_test(size=SIZE) as pilot:
+            await _subs_loaded(pilot)
+            screen = app.screen
+            assert isinstance(screen, ScopeScreen)
+            screen._on_entra_error(msg)
+            await pilot.pause()
+            text = str(screen.query_one("#entra-loading-label", Label).visual)
+            assert text.count("Graph request failed:") == 1
+            assert text.count("x") == 120
+            assert "Trace ID: 1" in text
+            assert text == "Error:\n\nGraph request failed:\n" + "x" * 80 + "\n" + "x" * 40 + "\nTrace ID: 1"
 
     asyncio.run(scenario())

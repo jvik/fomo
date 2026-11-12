@@ -23,7 +23,7 @@ from textual.widgets import (
 from textual.widgets.selection_list import Selection
 
 from fomo import azure, tiering
-from fomo.screens._common import VimNavMixin, device_code_markup, safe_markup
+from fomo.screens._common import VimNavMixin, device_code_markup, safe_markup, wrap_error_lines
 from fomo.widgets import FomoSelectionList as SelectionList
 
 MAX_SUBSCRIPTIONS = 3
@@ -298,11 +298,7 @@ class ScopeScreen(VimNavMixin, Screen):
                 "Run [bold]az login[/bold] in your terminal, then restart fomo."
             )
         else:
-            wrapped = "\n".join(
-                line if len(line) <= 80 else "\n".join(msg[i : i + 80] for i in range(0, len(line), 80))
-                for line in msg.splitlines()
-            )
-            body = safe_markup("[bold red]Error:[/bold red]\n\n$error", error=wrapped)
+            body = safe_markup("[bold red]Error:[/bold red]\n\n$error", error=wrap_error_lines(msg))
         self.query_one("#entra-loading-label", Label).update(body)
 
     # ------------------------------------------------------------------
