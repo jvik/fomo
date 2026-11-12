@@ -18,7 +18,7 @@ import pytest
 from textual.coordinate import Coordinate
 from textual.pilot import Pilot
 from textual.screen import Screen
-from textual.widgets import Button, DataTable, Input, RichLog, Select
+from textual.widgets import Button, DataTable, Footer, Input, RichLog, Select
 
 from fomo import app as app_module
 from fomo.app import PimApp
@@ -106,6 +106,22 @@ def _assert_fully_on_screen(screen: Screen, *selectors: str) -> None:
         assert geometry.region.height > 0, selector
         assert geometry.region.intersection(geometry.clip) == geometry.region, (selector, geometry)
         assert screen.region.contains_region(geometry.region), (selector, geometry)
+
+
+def _assert_buttons_bottom_right(screen: Screen) -> None:
+    """[Back] [Activate] at the bottom right, then a blank row above the footer."""
+    _assert_fully_on_screen(screen, "#btn-back", "#btn-activate")
+    buttons = screen.query_one("#buttons").region
+    back = screen.query_one("#btn-back").region
+    activate = screen.query_one("#btn-activate").region
+    assert back.y == activate.y
+    assert back.right < activate.x  # the primary button rightmost
+    assert activate.right == buttons.right
+    footer_y = screen.query_one(Footer).region.y
+    assert footer_y - buttons.bottom >= 1
+    activation = screen.query_one("#activation")
+    for y in range(buttons.bottom, footer_y):  # nothing but the container's padding
+        assert {screen.get_widget_at(x, y)[0] for x in range(screen.size.width)} == {activation}, y
 
 
 def test_azure_activation_failure_rows_and_error_log(make_app, fake_azure) -> None:
@@ -219,6 +235,7 @@ def test_form_stays_on_screen_at_80x24_and_duration_keeps_its_height(make_live_a
             assert [name for name, *_ in fake_azure.activations] == [r.role_name for r in FIVE_ROLES]
             assert not screen.query_one("#error-log").has_class("hidden")
             _assert_fully_on_screen(screen, "#justification", "#duration", "#error-log", "#btn-activate", "#btn-back")
+            _assert_buttons_bottom_right(screen)
 
             # Status stays in view: the table never scrolls sideways, Scope gives way with "…".
             table = screen.query_one("#roles-table", DataTable)
@@ -235,6 +252,66 @@ def test_form_stays_on_screen_at_80x24_and_duration_keeps_its_height(make_live_a
             await pilot.pause()
             _assert_fully_on_screen(screen, "#justification", "#duration", "#error-log", "#btn-activate")
             assert screen.query_one("#duration").region.height >= 3
+
+    asyncio.run(scenario())
+
+
+def _ids(screen: Screen) -> list[str | None]:
+    return [widget.id for widget in screen.focus_chain]
+
+
+def test_buttons_bottom_right_and_tab_goes_from_duration_to_activate(make_live_app, fake_azure) -> None:
+    """With every role in view, the role list is no Tab stop (it showed no focus)."""
+
+    async def scenario() -> None:
+        app = make_live_app()
+        async with app.run_test(size=(80, 24)) as pilot:
+            for screen in _both_screens():
+                await _open(pilot, screen)
+                await pilot.pause()
+                _assert_buttons_bottom_right(screen)
+                assert not screen.query_one("#roles-scroll").focusable
+                assert _ids(screen) == ["justification", "duration", "btn-activate", "btn-back"]
+
+                screen.query_one("#duration").focus()
+                await pilot.press("tab")
+                assert app.focused is screen.query_one("#btn-activate"), type(screen).__name__
+                await pilot.press("escape")
+                await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
+
+    asyncio.run(scenario())
+
+
+def test_a_long_role_list_is_a_tab_stop_while_it_overflows(make_live_app, fake_azure) -> None:
+    roles = [_arm(f"Role {i:02d}", SUB) for i in range(20)]
+
+    async def scenario() -> None:
+        app = make_live_app()
+        async with app.run_test(size=(80, 24)) as pilot:
+            screen = ActivationScreen(roles)
+            await _open(pilot, screen)
+            scroll = screen.query_one("#roles-scroll")
+            await wait_for(pilot, lambda: scroll.focusable)
+            assert _ids(screen) == ["justification", "duration", "roles-scroll", "btn-activate", "btn-back"]
+            table = screen.query_one("#roles-table", DataTable)
+            border, region = table.styles.border_top, table.region
+
+            screen.query_one("#duration").focus()
+            await pilot.press("tab")
+            assert app.focused is scroll
+            # Focus shows: the table's frame changes colour, and nothing moves.
+            assert table.styles.border_top[0] == border[0]
+            assert table.styles.border_top[1] != border[1]
+            assert table.region == region
+            # The keys scroll the list.
+            await pilot.press("end")
+            await wait_for(pilot, lambda: scroll.scroll_y == scroll.max_scroll_y > 0)
+
+            # Once every row fits, the list hands focus on to Activate.
+            await pilot.resize_terminal(120, 36)
+            await wait_for(pilot, lambda: not scroll.focusable)
+            assert app.focused is screen.query_one("#btn-activate")
+            assert table.styles.border_top == border
 
     asyncio.run(scenario())
 
@@ -311,6 +388,7 @@ def test_entra_failure_shows_short_status_and_wrapped_details_at_80x24(make_live
                 assert any(word in line for line in lines), (word, lines)
             assert max(strip.cell_length for strip in error_log.lines) <= error_log.scrollable_content_region.width
             _assert_fully_on_screen(screen, "#justification", "#duration", "#error-log")
+            _assert_buttons_bottom_right(screen)
 
     asyncio.run(scenario())
 

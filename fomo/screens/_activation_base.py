@@ -3,8 +3,9 @@
 Both screens put the reason (justification) and duration form at the top, so
 it stays visible on small terminals, followed by the selected roles in one or
 more scrollable tables with a Status column, an error details panel that only
-appears after a failure, and the Activate/Back buttons.  The subclasses define
-their title, tables and columns and how a role is activated.
+appears after a failure, and the Back and Activate buttons at the bottom
+right.  The subclasses define their title, tables and columns and how a role
+is activated.
 
 When a run finishes, a summary toast reports the outcomes and the screen
 offers the next steps: retry the failed roles (``r``, or the Activate button,
@@ -34,6 +35,7 @@ from textual.coordinate import Coordinate
 from textual.events import Resize
 from textual.notifications import SeverityLevel
 from textual.screen import Screen
+from textual.widget import Widget
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, RichLog, Select
 
 from fomo import azure, tiering
@@ -246,6 +248,38 @@ class RoleTable(DataTable):
         self.update_cell_at(origin, self.get_cell_at(origin), update_width=True)
 
 
+class RolesScroll(VerticalScroll):
+    """Scrolls the role tables, and is a Tab stop only while there is something to scroll.
+
+    A scroll container takes focus by default, but with every row in view a
+    focused one shows nothing and its keys do nothing: Tab seemed to stop
+    nowhere.  This one takes focus only while its content overflows, and then
+    the arrow keys, Page Up/Down, Home and End scroll it.  While it has focus,
+    its tables' frames change colour (app.tcss).
+    """
+
+    def __init__(self, *, id: str | None = None) -> None:
+        super().__init__(id=id)
+        self.can_focus = False
+
+    def on_resize(self, event: Resize) -> None:  # noqa: ARG002
+        self._update_can_focus()
+
+    def watch_virtual_size(self) -> None:
+        # The content's height changed (rows added, a table shown), which
+        # sends no Resize.  Check once the layout is complete.
+        self.call_after_refresh(self._update_can_focus)
+
+    def _update_can_focus(self) -> None:
+        overflows = self.max_scroll_y > 0
+        if overflows == self.can_focus:
+            return
+        if self.has_focus:
+            # Everything fits now: hand focus on while this is still in the chain.
+            self.screen.focus_next()
+        self.can_focus = overflows
+
+
 class ActivationScreenBase(Screen[ActivationResult[RoleT] | None], Generic[RoleT]):
     """Justification form plus per-role activation progress."""
 
@@ -320,7 +354,7 @@ class ActivationScreenBase(Screen[ActivationResult[RoleT] | None], Generic[RoleT
                 # No blank row: a blank Select's value is Select.NULL, which is
                 # truthy and would reach activate_role as the duration.
                 yield Select(_DURATION_OPTIONS, value="PT1H", allow_blank=False, id="duration")
-            with VerticalScroll(id="roles-scroll"):
+            with RolesScroll(id="roles-scroll"):
                 yield from self._compose_tables()
             # Wrapped to the panel's width; it opens on the first failure, not the last.
             error_log = RichLog(
@@ -334,10 +368,26 @@ class ActivationScreenBase(Screen[ActivationResult[RoleT] | None], Generic[RoleT
             )
             error_log.border_title = "Details"
             yield error_log
+            # Bottom right, the primary button rightmost (see focus_chain for Tab).
             with Horizontal(id="buttons"):
-                yield Button("Activate", variant="primary", id="btn-activate")
                 yield Button("Back", id="btn-back")
+                yield Button("Activate", variant="primary", id="btn-activate")
         yield Footer()
+
+    @property
+    def focus_chain(self) -> list[Widget]:
+        """Tab order: reason, duration, the role list (when it scrolls), Activate, Back.
+
+        Textual orders Tab stops by position, and Back is drawn to the left of
+        Activate; Tab still reaches the primary button first.
+        """
+        chain = super().focus_chain
+        ids = [widget.id for widget in chain]
+        if "btn-back" in ids and "btn-activate" in ids:
+            back, activate = ids.index("btn-back"), ids.index("btn-activate")
+            if back < activate:
+                chain[back], chain[activate] = chain[activate], chain[back]
+        return chain
 
     def on_mount(self) -> None:
         for table_id, roles in self._role_tables():
