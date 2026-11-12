@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol
 
 from textual.content import Content
 from textual.widget import Widget
+
+from fomo import timefmt
 
 
 def safe_markup(template: str, /, **values: object) -> Content:
@@ -22,6 +25,59 @@ def safe_markup(template: str, /, **values: object) -> Content:
     take ``rich.text.Text(text)``.
     """
     return Content.from_markup(template, **values)
+
+
+class _RoleState(Protocol):
+    """What the role lists show about an eligible Azure or Entra role's state."""
+
+    @property
+    def is_active(self) -> bool: ...
+    @property
+    def active_until(self) -> str | None: ...
+    @property
+    def expiry(self) -> str | None: ...
+
+
+def role_state_tag(role: _RoleState, now: datetime) -> str:
+    """The state after a role in a list: "● active · 47m left", "eligible until 2026-12-31" or "".
+
+    An active role whose end is unknown (e.g. activated in this session) is
+    just "● active"; an eligibility without an end date shows nothing.
+    """
+    if role.is_active:
+        left = timefmt.format_remaining(role.active_until, now) if role.active_until else ""
+        return f"● active · {left}" if left else "● active"
+    if role.expiry:
+        return f"eligible until {timefmt.format_date(role.expiry)}"
+    return ""
+
+
+def role_list_prompt(text: str, role: _RoleState, now: datetime) -> tuple[str, Content]:
+    """A role list row: *text* followed by its :func:`role_state_tag`.
+
+    Returns the plain text (for filtering) and the prompt to show, in which
+    an active tag is green and an eligibility tag dim.
+    """
+    tag = role_state_tag(role, now)
+    if not tag:
+        return text, Content(text)
+    template = "$text   [bold $success]$tag[/]" if role.is_active else "$text   [dim]$tag[/dim]"
+    return f"{text}   {tag}", safe_markup(template, text=text, tag=tag)
+
+
+def role_detail_state(role: _RoleState, now: datetime) -> tuple[str, str]:
+    """The detail pane's active line (or "") and eligibility line, as plain text.
+
+    "Active until 14:32 (47m left)", or "Currently active" without a known
+    end; "Eligible until 2026-12-31" or "Eligible permanently".
+    """
+    active = ""
+    if role.is_active and role.active_until:
+        active = f"Active until {timefmt.format_end(role.active_until, now)}"
+    elif role.is_active:
+        active = "Currently active"
+    eligible = f"Eligible until {timefmt.format_date(role.expiry)}" if role.expiry else "Eligible permanently"
+    return active, eligible
 
 
 class _HasFocus(Protocol):

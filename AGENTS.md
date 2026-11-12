@@ -41,6 +41,7 @@ fomo/
   backend.py           # Backend: AzureBackend (real APIs) or DemoBackend (--demo) for the TUI
   demo.py              # Dummy data for --demo mode and screenshots
   tiering.py           # Blast-radius tier data (emiliensocchi/azure-tiering), fetched and cached
+  timefmt.py           # Pure helpers for end times: "47m left", "14:32 (47m left)", dates
   widgets.py           # Custom Textual widgets (FomoSelectionList)
   screens/
     scope_screen.py    # Step 1 — Azure tab (subscriptions) and Entra tab (Entra roles)

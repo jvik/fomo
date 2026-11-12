@@ -23,8 +23,15 @@ from textual.widgets import (
 )
 from textual.widgets.selection_list import Selection
 
-from fomo import azure, tiering
-from fomo.screens._common import VimNavMixin, device_code_markup, safe_markup, wrap_error_lines
+from fomo import azure, tiering, timefmt
+from fomo.screens._common import (
+    VimNavMixin,
+    device_code_markup,
+    role_detail_state,
+    role_list_prompt,
+    safe_markup,
+    wrap_error_lines,
+)
 from fomo.widgets import FomoSelectionList as SelectionList
 
 if TYPE_CHECKING:
@@ -382,15 +389,11 @@ class ScopeScreen(VimNavMixin, Screen):
         self._visible_indices = set()
         self._option_values = []
         ordered = sorted(enumerate(self.all_roles), key=lambda item: self._entra_sort_key(item[1]))
+        now = timefmt.now()
         for idx, role in ordered:
             if q and q not in role.role_name.lower():
                 continue
-            active_tag = " [bold green](active)[/bold green]" if role.is_active else ""
-            label = safe_markup(
-                f"$name{active_tag} [dim]- $expiry[/dim]",
-                name=role.role_name,
-                expiry=azure.format_expiry(role.expiry),
-            )
+            _, label = role_list_prompt(role.role_name, role, now)
             sl.add_option(Selection(label, idx, idx in self._selected))
             self._visible_indices.add(idx)
             self._option_values.append(idx)
@@ -444,17 +447,16 @@ class ScopeScreen(VimNavMixin, Screen):
     def _update_entra_detail(self, role: azure.EntraEligibleRole) -> None:
         detail_lbl = self.query_one("#entra-detail", Label)
         tier_info = tiering.get_entra_tier(role.role_definition_id)
-        expiry = azure.format_expiry(role.expiry)
-        active_tag = "\n[bold #27ae60]● Currently active[/bold #27ae60]" if role.is_active else ""
+        active, eligible = role_detail_state(role, timefmt.now())
+        active_tag = "\n[bold $success]● $active[/]" if active else ""
 
         if not tier_info:
             detail_lbl.update(
                 safe_markup(
-                    f"[bold]$name[/bold]{active_tag}\n"
-                    "Expires: [dim]$expiry[/dim]\n\n"
-                    "[dim]No tiering data available for this role.[/dim]",
+                    f"[bold]$name[/bold]{active_tag}\n$eligible\n\n[dim]No tiering data available for this role.[/dim]",
                     name=role.role_name,
-                    expiry=expiry,
+                    active=active,
+                    eligible=eligible,
                 )
             )
             return
@@ -471,11 +473,13 @@ class ScopeScreen(VimNavMixin, Screen):
             f"{badge} [bold {col}]Tier {tier}[/bold {col}]  [dim]{tlabel}[/dim]",
             "",
             f"[bold]$name[/bold]{active_tag}",
-            "Expires: [dim]$expiry[/dim]",
+            "$eligible",
         ]
         if attack and attack != "-":
             parts.extend(["", f"[bold]{path_header}:[/bold]", "$attack"])
-        detail_lbl.update(safe_markup("\n".join(parts), name=role.role_name, expiry=expiry, attack=attack))
+        detail_lbl.update(
+            safe_markup("\n".join(parts), name=role.role_name, active=active, eligible=eligible, attack=attack)
+        )
 
     def _select_all_entra_visible(self) -> None:
         self._selected.update(self._visible_indices)

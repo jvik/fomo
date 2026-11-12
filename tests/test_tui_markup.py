@@ -193,7 +193,8 @@ def test_entra_list_and_detail_render_verbatim(make_live_app, fake_azure, monkey
             screen.action_next_tab()
             entra_list = screen.query_one("#entra-role-list", FomoSelectionList)
             await wait_for(pilot, lambda: entra_list.option_count == 1)
-            assert _prompts(entra_list) == ["Global Reader [legacy] - Permanent"]
+            # No eligibility end date: nothing after the name (the detail pane says "Eligible permanently").
+            assert _prompts(entra_list) == ["Global Reader [legacy]"]
             detail_label = screen.query_one("#entra-detail", Label)
             # Tier data loads in its own worker and may arrive after the list.
             await wait_for(pilot, lambda: TIER_TEXT in _text(detail_label))
@@ -257,7 +258,7 @@ def test_roles_screen_renders_role_scope_and_tier_text_verbatim(make_live_app, f
             await app.push_screen(screen)
             role_list = screen.query_one("#role-list", FomoSelectionList)
             await wait_for(pilot, lambda: role_list.option_count == 1)
-            assert _prompts(role_list) == ["Key Vault Administrator [preview]  —  rg-[x]  [expires 2030-01-31]"]
+            assert _prompts(role_list) == ["Key Vault Administrator [preview]  —  rg-[x]   eligible until 2030-01-31"]
             detail_label = screen.query_one("#detail", Label)
             # Tier data loads in its own worker and may arrive after the list.
             await wait_for(pilot, lambda: TIER_TEXT in _text(detail_label))

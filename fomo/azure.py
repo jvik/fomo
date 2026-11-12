@@ -191,6 +191,7 @@ class EligibleRole:
     eligibility_schedule_id: str  # short GUID used in linkedRoleEligibilityScheduleId
     expiry: str | None  # ISO 8601 datetime string or None
     is_active: bool = False  # True if already PIM-activated
+    active_until: str | None = None  # end of the current activation (ISO 8601), if active
 
     @property
     def is_global(self) -> bool:
@@ -207,6 +208,7 @@ class EntraEligibleRole:
     expiry: str | None
     directory_scope_id: str = "/"  # directoryScopeId from eligibility; "/" = tenant-wide
     is_active: bool = False
+    active_until: str | None = None  # end of the current activation (ISO 8601), if active
 
 
 @dataclass
@@ -261,13 +263,6 @@ def parse_duration(s: str) -> str:
             result += f"{m.group(2)}M"
         return result
     raise ValueError(f"Invalid duration {s!r}. Use e.g. '30m', '1h', '1h30m', or ISO 8601 like 'PT1H'.")
-
-
-def format_expiry(expiry: str | None) -> str:
-    """Shorten an ISO 8601 datetime to YYYY-MM-DD, or return 'Permanent'."""
-    if not expiry:
-        return "Permanent"
-    return expiry[:10]
 
 
 # ---------------------------------------------------------------------------
@@ -354,7 +349,7 @@ def list_eligible_roles_mg(mg_id: str) -> list[EligibleRole]:
         f"?$filter=asTarget()&api-version=2020-10-01"
     )
     user_id = get_current_user()
-    active_keys = _list_active_role_keys(scope)
+    active_ends = _list_active_role_keys(scope)
     data = _run_az("rest", "--method", "GET", "--url", url)
     roles: list[EligibleRole] = []
     for item in data.get("value", []):
@@ -364,7 +359,7 @@ def list_eligible_roles_mg(mg_id: str) -> list[EligibleRole]:
         sched_id = sched_path.rsplit("/", 1)[-1] if "/" in sched_path else item.get("name", str(uuid.uuid4()))
         actual_scope = expanded.get("scope", {}).get("id") or scope
         role_def_id = props.get("roleDefinitionId", "")
-        already_active = (role_def_id, actual_scope) in active_keys
+        already_active = (role_def_id, actual_scope) in active_ends
         if already_active:
             log.debug("marking already-active role %s on %s", role_def_id, actual_scope)
         roles.append(
@@ -377,16 +372,18 @@ def list_eligible_roles_mg(mg_id: str) -> list[EligibleRole]:
                 eligibility_schedule_id=sched_id,
                 expiry=props.get("endDateTime"),
                 is_active=already_active,
+                active_until=active_ends.get((role_def_id, actual_scope)),
             )
         )
     return roles
 
 
-def _list_active_role_keys(scope: str) -> frozenset[tuple[str, str]]:
-    """Return a set of (role_definition_id, scope) for currently active PIM assignments.
+def _list_active_role_keys(scope: str) -> dict[tuple[str, str], str | None]:
+    """Map (role_definition_id, scope) of each currently active PIM assignment to its end.
 
-    A failed lookup returns an empty set, so every role is listed as not
-    active; the failure is logged as a warning.
+    The end is the activation's ``endDateTime`` (ISO 8601), or ``None`` if it
+    has none.  A failed lookup returns an empty mapping, so every role is
+    listed as not active; the failure is logged as a warning.
     """
     url = (
         f"https://management.azure.com{scope}"
@@ -397,8 +394,8 @@ def _list_active_role_keys(scope: str) -> frozenset[tuple[str, str]]:
         data = _run_az("rest", "--method", "GET", "--url", url)
     except RuntimeError as exc:
         log.warning("could not read active assignments for %s: %s", scope, exc)
-        return frozenset()
-    keys: set[tuple[str, str]] = set()
+        return {}
+    ends: dict[tuple[str, str], str | None] = {}
     for item in data.get("value", []):
         props = item.get("properties", {})
         # Only count Activated (PIM-activated) assignments, not permanent ones
@@ -407,8 +404,8 @@ def _list_active_role_keys(scope: str) -> frozenset[tuple[str, str]]:
         expanded = props.get("expandedProperties", {})
         role_def_id = props.get("roleDefinitionId", "")
         active_scope = expanded.get("scope", {}).get("id") or scope
-        keys.add((role_def_id, active_scope))
-    return frozenset(keys)
+        ends[(role_def_id, active_scope)] = props.get("endDateTime")
+    return ends
 
 
 def list_eligible_roles(subscription_id: str) -> list[EligibleRole]:
@@ -429,7 +426,7 @@ def list_eligible_roles(subscription_id: str) -> list[EligibleRole]:
     # object ID.  We always substitute the real user ID here so activation
     # works for both direct and group-based eligibilities.
     user_id = get_current_user()
-    active_keys = _list_active_role_keys(scope)
+    active_ends = _list_active_role_keys(scope)
     data = _run_az("rest", "--method", "GET", "--url", url)
     roles: list[EligibleRole] = []
     for item in data.get("value", []):
@@ -440,7 +437,7 @@ def list_eligible_roles(subscription_id: str) -> list[EligibleRole]:
         sched_id = sched_path.rsplit("/", 1)[-1] if "/" in sched_path else item.get("name", str(uuid.uuid4()))
         actual_scope = expanded.get("scope", {}).get("id") or scope
         role_def_id = props.get("roleDefinitionId", "")
-        already_active = (role_def_id, actual_scope) in active_keys
+        already_active = (role_def_id, actual_scope) in active_ends
         if already_active:
             log.debug("marking already-active role %s on %s", role_def_id, actual_scope)
         roles.append(
@@ -453,6 +450,7 @@ def list_eligible_roles(subscription_id: str) -> list[EligibleRole]:
                 eligibility_schedule_id=sched_id,
                 expiry=props.get("endDateTime"),
                 is_active=already_active,
+                active_until=active_ends.get((role_def_id, actual_scope)),
             )
         )
     return roles
@@ -917,11 +915,12 @@ def _run_graph(method: str, url: str, body: str | None = None) -> Any:
         raise RuntimeError(_redact(str(detail))) from None
 
 
-def _list_active_entra_role_def_ids(principal_id: str) -> frozenset[str]:
-    """Return role definition IDs currently PIM-activated in Entra for *principal_id*.
+def _list_active_entra_role_def_ids(principal_id: str) -> dict[str, str | None]:
+    """Map the role definition IDs currently PIM-activated in Entra for *principal_id* to their end.
 
-    A failed lookup returns an empty set, so every role is listed as not
-    active; the failure is logged as a warning.
+    The end is the activation's ``endDateTime`` (ISO 8601), or ``None`` if it
+    has none.  A failed lookup returns an empty mapping, so every role is
+    listed as not active; the failure is logged as a warning.
     """
     filter_val = urllib.parse.quote(
         f"principalId eq '{principal_id}' and assignmentType eq 'Activated'",
@@ -932,8 +931,8 @@ def _list_active_entra_role_def_ids(principal_id: str) -> frozenset[str]:
         data = _run_graph("GET", url)
     except RuntimeError as exc:
         log.warning("could not read active assignments for Entra roles: %s", exc)
-        return frozenset()
-    return frozenset(item.get("roleDefinitionId", "") for item in data.get("value", []))
+        return {}
+    return {item.get("roleDefinitionId", ""): item.get("endDateTime") for item in data.get("value", [])}
 
 
 def list_entra_eligible_roles(
@@ -945,7 +944,7 @@ def list_entra_eligible_roles(
     # Acquire the token once (triggering device code if needed) so all
     # subsequent _run_graph calls hit the in-process cache silently.
     _get_graph_token(on_device_code, stop_event)
-    active_def_ids = _list_active_entra_role_def_ids(user_id)
+    active_ends = _list_active_entra_role_def_ids(user_id)
     filter_val = urllib.parse.quote(f"principalId eq '{user_id}'", safe="'()")
     url = (
         f"{_GRAPH}/v1.0/roleManagement/directory/roleEligibilityScheduleInstances"
@@ -964,7 +963,8 @@ def list_entra_eligible_roles(
                 eligibility_schedule_id=item.get("roleEligibilityScheduleId", item.get("id", str(uuid.uuid4()))),
                 expiry=item.get("endDateTime"),
                 directory_scope_id=item.get("directoryScopeId", "/"),
-                is_active=role_def_id in active_def_ids,
+                is_active=role_def_id in active_ends,
+                active_until=active_ends.get(role_def_id),
             )
         )
     return roles

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from datetime import datetime
 
 from rich.text import Text
 from textual import work
@@ -13,10 +14,37 @@ from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Label, LoadingIndicator, TabbedContent, TabPane
 from textual.widgets.data_table import ColumnKey
 
-from fomo import azure
+from fomo import azure, timefmt
 from fomo.screens._common import VimNavMixin, device_code_markup, safe_markup, wrap_error_lines
 
 _COL_NAMES = ("Role", "Scope", "Expiry", "Type")
+
+# How the Entra tab shows the tenant-wide directory scope "/".
+_DIRECTORY_SCOPE = "Directory"
+
+
+class _SortableText(Text):
+    """A table cell that sorts by *sort_key* instead of its text."""
+
+    __slots__ = ("sort_key",)
+
+    def __init__(self, text: str, sort_key: tuple[int, float, str]) -> None:
+        super().__init__(text)
+        self.sort_key = sort_key
+
+
+def _expiry_cell(expiry: str | None, now: datetime) -> Text:
+    """Expiry cell: "14:32 (47m left)" when near, else a date; sorts by the time itself."""
+    return _SortableText(timefmt.format_end(expiry, now), timefmt.end_sort_key(expiry))
+
+
+def _cell_sort_key(cell: object) -> object:
+    return cell.sort_key if isinstance(cell, _SortableText) else str(cell)
+
+
+def _entra_scope(directory_scope_id: str) -> str:
+    return _DIRECTORY_SCOPE if directory_scope_id == "/" else directory_scope_id
+
 
 _SESSION_EXPIRED = (
     "[bold red]Azure session expired.[/bold red]\n\n"
@@ -137,11 +165,12 @@ class AssignmentsScreen(VimNavMixin, Screen):
             return
         label.update(f"Azure assignments  ({len(assignments)} found)")
         table = self.query_one("#azure-table", DataTable)
+        now = timefmt.now()
         for a in sorted(assignments, key=lambda x: (x.role_name, x.scope_display_name)):
             table.add_row(
                 Text(a.role_name),
                 Text(a.scope_display_name),
-                Text(azure.format_expiry(a.expiry)),
+                _expiry_cell(a.expiry, now),
                 Text(a.assignment_type),
             )
         table.display = True
@@ -194,11 +223,12 @@ class AssignmentsScreen(VimNavMixin, Screen):
             return
         label.update(f"Entra assignments  ({len(assignments)} found)")
         table = self.query_one("#entra-table", DataTable)
+        now = timefmt.now()
         for a in sorted(assignments, key=lambda x: x.role_name):
             table.add_row(
                 Text(a.role_name),
-                Text(a.directory_scope_id),
-                Text(azure.format_expiry(a.expiry)),
+                Text(_entra_scope(a.directory_scope_id)),
+                _expiry_cell(a.expiry, now),
                 Text(a.assignment_type),
             )
         table.display = True
@@ -231,8 +261,9 @@ class AssignmentsScreen(VimNavMixin, Screen):
         else:
             self._sort_col[tid] = col
             self._sort_asc[tid] = True
-        # Cells are rich Text objects, which don't order; sort by their plain text.
-        table.sort(col, key=str, reverse=not self._sort_asc[tid])
+        # Cells are rich Text objects, which don't order: sort by their plain
+        # text, or for Expiry by the end time itself rather than how it reads.
+        table.sort(col, key=_cell_sort_key, reverse=not self._sort_asc[tid])
         self._refresh_headers(table)
 
     def _refresh_headers(self, table: DataTable) -> None:

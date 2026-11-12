@@ -9,13 +9,12 @@ from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.content import Content
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, Label, LoadingIndicator
 from textual.widgets.selection_list import Selection
 
-from fomo import azure, tiering
-from fomo.screens._common import VimNavMixin, safe_markup
+from fomo import azure, tiering, timefmt
+from fomo.screens._common import VimNavMixin, role_detail_state, role_list_prompt, safe_markup
 from fomo.widgets import FomoSelectionList as SelectionList
 
 if TYPE_CHECKING:
@@ -215,16 +214,13 @@ class RolesScreen(VimNavMixin, Screen):
         sub_items = [(i, r) for i, r in ordered if not r.is_global]
         global_items = [(i, r) for i, r in ordered if r.is_global]
 
+        now = timefmt.now()
+
         def _add(items: list) -> None:
             for i, role in items:
-                text = f"{role.role_name}  —  {role.scope_display_name}"
-                expiry_tag = f"  [expires {azure.format_expiry(role.expiry)}]" if role.expiry else ""
-                active_tag = "  (active)" if role.is_active else ""
-                display = f"{text}{expiry_tag}{active_tag}"
+                display, prompt = role_list_prompt(f"{role.role_name}  —  {role.scope_display_name}", role, now)
                 if q and q not in display.lower():
                     continue
-                # Plain text: the brackets in "[expires …]" are literal, not markup.
-                prompt = Content(display)
                 if role.is_active:
                     sl.add_option(Selection(prompt, i, False, disabled=True))
                 else:
@@ -280,19 +276,20 @@ class RolesScreen(VimNavMixin, Screen):
         detail_lbl = self.query_one("#detail", Label)
         tier_info = tiering.get_azure_tier(role.role_definition_id)
         scope = role.scope_display_name
-        expiry = azure.format_expiry(role.expiry)
-        active_tag = "\n[bold #27ae60]● Currently active[/bold #27ae60]" if role.is_active else ""
+        active, eligible = role_detail_state(role, timefmt.now())
+        active_tag = "\n[bold $success]● $active[/]" if active else ""
 
         if not tier_info:
             detail_lbl.update(
                 safe_markup(
                     f"[bold]$name[/bold]{active_tag}\n"
                     "[dim]$scope[/dim]\n"
-                    "Expires: [dim]$expiry[/dim]\n\n"
+                    "$eligible\n\n"
                     "[dim]No tiering data available for this role.[/dim]",
                     name=role.role_name,
+                    active=active,
                     scope=scope,
-                    expiry=expiry,
+                    eligible=eligible,
                 )
             )
             return
@@ -310,11 +307,20 @@ class RolesScreen(VimNavMixin, Screen):
             "",
             f"[bold]$name[/bold]{active_tag}",
             "[dim]$scope[/dim]",
-            "Expires: [dim]$expiry[/dim]",
+            "$eligible",
         ]
         if attack and attack != "-":
             parts.extend(["", f"[bold]{path_header}:[/bold]", "$attack"])
-        detail_lbl.update(safe_markup("\n".join(parts), name=role.role_name, scope=scope, expiry=expiry, attack=attack))
+        detail_lbl.update(
+            safe_markup(
+                "\n".join(parts),
+                name=role.role_name,
+                active=active,
+                scope=scope,
+                eligible=eligible,
+                attack=attack,
+            )
+        )
 
     # ------------------------------------------------------------------
     # Event handlers

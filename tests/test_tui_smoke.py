@@ -149,7 +149,7 @@ def test_roles_screen_disables_active_role_and_cycles_sort(make_app, tiering_fix
             contributor = [
                 roles.get_option_at_index(i)
                 for i, prompt in enumerate(_prompts(roles))
-                if prompt.startswith("Contributor") and "(active)" in prompt
+                if prompt.startswith("Contributor") and "● active" in prompt
             ]
             assert contributor, _prompts(roles)
             assert all(opt.disabled for opt in contributor)
@@ -188,11 +188,11 @@ def test_activation_screen_dry_run(make_app, fake_azure) -> None:
             assert all("DryRun" in c for c in cells), cells
 
             # Escape after the run (F10): back on the roles screen, the role
-            # is now "(active)" and disabled, and nothing is selected.
+            # is now "● active" and disabled, and nothing is selected.
             await pilot.press("escape")
             await wait_for(pilot, lambda: isinstance(app.screen, RolesScreen))
             await wait_for(pilot, lambda: roles.get_option_at_index(idx).disabled)
-            assert "(active)" in str(roles.get_option_at_index(idx).prompt)
+            assert "● active" in str(roles.get_option_at_index(idx).prompt)
             assert app.screen._selected == set()
             assert roles.selected == []
 
@@ -208,7 +208,7 @@ def test_entra_activation_screen_dry_run(make_app, fake_azure) -> None:
         app = make_app()
         async with app.run_test(size=SIZE) as pilot:
             entra = await _switch_to_entra(pilot)
-            idx = next(i for i, p in enumerate(_prompts(entra)) if "(active)" not in p)
+            idx = next(i for i, p in enumerate(_prompts(entra)) if "● active" not in p)
             entra.focus()
             entra.highlighted = idx
             await pilot.pause()
@@ -224,11 +224,11 @@ def test_entra_activation_screen_dry_run(make_app, fake_azure) -> None:
             assert all("DryRun" in c for c in cells), cells
 
             # Enter (Done) after the run (F10): back on the Entra tab, the
-            # role is marked "(active)" and the selection is cleared.
+            # role is marked "● active" and the selection is cleared.
             await pilot.press("enter")
             await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
             assert app.screen.query_one("#scope-tabs", TabbedContent).active == "tab-entra"
-            await wait_for(pilot, lambda: "(active)" in _prompts(entra)[idx])
+            await wait_for(pilot, lambda: "● active" in _prompts(entra)[idx])
             assert app.screen._selected == set()
             assert entra.selected == []
 
