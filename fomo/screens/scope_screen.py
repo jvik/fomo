@@ -22,13 +22,14 @@ from textual.widgets import (
 from textual.widgets.selection_list import Selection
 
 from fomo import azure, tiering
+from fomo.screens._common import VimNavMixin, device_code_markup
 from fomo.widgets import FomoSelectionList as SelectionList
 
 MAX_SUBSCRIPTIONS = 3
 ENTRA_SORT_MODES = ("name", "tier", "expiry")
 
 
-class ScopeScreen(Screen):
+class ScopeScreen(VimNavMixin, Screen):
     """First screen: select Azure subscriptions or Entra roles."""
 
     BINDINGS = [
@@ -251,12 +252,7 @@ class ScopeScreen(Screen):
             url, _, code = message.partition("\n")
 
             def _update() -> None:
-                self.query_one("#entra-loading-label", Label).update(
-                    "[bold]Sign in to Microsoft Graph[/bold]\n\n"
-                    f"[dim]1.[/dim] Open:  [link]{url}[/link]\n"
-                    f"[dim]2.[/dim] Enter code:  [bold]{code}[/bold]\n\n"
-                    "[dim]Waiting for authentication…[/dim]"
-                )
+                self.query_one("#entra-loading-label", Label).update(device_code_markup(url, code))
 
             self.app.call_from_thread(_update)
 
@@ -535,7 +531,7 @@ class ScopeScreen(Screen):
         self.app.exit()
 
     # ------------------------------------------------------------------
-    # Vim-style navigation (focus-based, works for both tabs)
+    # Arrow navigation (vim actions come from VimNavMixin)
     # ------------------------------------------------------------------
 
     def action_arrow_down(self) -> None:
@@ -543,23 +539,3 @@ class ScopeScreen(Screen):
 
     def action_arrow_up(self) -> None:
         self.focus_previous()
-
-    def action_vim_down(self) -> None:
-        w = self.focused
-        if w is not None and hasattr(w, "action_cursor_down"):
-            w.action_cursor_down()
-
-    def action_vim_up(self) -> None:
-        w = self.focused
-        if w is not None and hasattr(w, "action_cursor_up"):
-            w.action_cursor_up()
-
-    def action_vim_top(self) -> None:
-        w = self.focused
-        if w is not None and hasattr(w, "scroll_home"):
-            w.scroll_home(animate=False)
-
-    def action_vim_bottom(self) -> None:
-        w = self.focused
-        if w is not None and hasattr(w, "scroll_end"):
-            w.scroll_end(animate=False)

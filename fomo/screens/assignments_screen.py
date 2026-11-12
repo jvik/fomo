@@ -13,11 +13,12 @@ from textual.widgets import DataTable, Footer, Header, Label, LoadingIndicator, 
 from textual.widgets.data_table import ColumnKey
 
 from fomo import azure
+from fomo.screens._common import VimNavMixin, device_code_markup, wrap_error_lines
 
 _COL_NAMES = ("Role", "Scope", "Expiry", "Type")
 
 
-class AssignmentsScreen(Screen):
+class AssignmentsScreen(VimNavMixin, Screen):
     """Show all currently active Azure ARM and Entra role assignments."""
 
     BINDINGS = [
@@ -119,12 +120,7 @@ class AssignmentsScreen(Screen):
             url, _, code = message.partition("\n")
 
             def _update() -> None:
-                self.query_one("#entra-loading", Label).update(
-                    "[bold]Sign in to Microsoft Graph[/bold]\n\n"
-                    f"[dim]1.[/dim] Open:  [link]{url}[/link]\n"
-                    f"[dim]2.[/dim] Enter code:  [bold]{code}[/bold]\n\n"
-                    "[dim]Waiting for authentication…[/dim]"
-                )
+                self.query_one("#entra-loading", Label).update(device_code_markup(url, code))
 
             self.app.call_from_thread(_update)
 
@@ -166,11 +162,7 @@ class AssignmentsScreen(Screen):
                 "[bold red]Missing Graph permissions.[/bold red]\n\nRe-run [bold]fomo --entra[/bold] to re-authorise."
             )
         else:
-            wrapped = "\n".join(
-                line if len(line) <= 80 else "\n".join(line[i : i + 80] for i in range(0, len(line), 80))
-                for line in msg.splitlines()
-            )
-            body = f"[bold red]Error:[/bold red]\n\n{wrapped}"
+            body = f"[bold red]Error:[/bold red]\n\n{wrap_error_lines(msg)}"
         self.query_one("#entra-loading", Label).update(body)
 
     # ------------------------------------------------------------------
@@ -207,27 +199,3 @@ class AssignmentsScreen(Screen):
         keys = list(focused.columns.keys())
         if col_index < len(keys):
             self._sort_table(focused, keys[col_index])
-
-    # ------------------------------------------------------------------
-    # vim-style navigation
-    # ------------------------------------------------------------------
-
-    def action_vim_down(self) -> None:
-        w = self.focused
-        if w is not None and hasattr(w, "action_cursor_down"):
-            w.action_cursor_down()
-
-    def action_vim_up(self) -> None:
-        w = self.focused
-        if w is not None and hasattr(w, "action_cursor_up"):
-            w.action_cursor_up()
-
-    def action_vim_top(self) -> None:
-        w = self.focused
-        if w is not None and hasattr(w, "scroll_home"):
-            w.scroll_home(animate=False)
-
-    def action_vim_bottom(self) -> None:
-        w = self.focused
-        if w is not None and hasattr(w, "scroll_end"):
-            w.scroll_end(animate=False)

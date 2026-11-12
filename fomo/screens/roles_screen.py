@@ -11,13 +11,14 @@ from textual.widgets import Footer, Header, Input, Label, LoadingIndicator
 from textual.widgets.selection_list import Selection
 
 from fomo import azure, tiering
+from fomo.screens._common import VimNavMixin
 from fomo.widgets import FomoSelectionList as SelectionList
 
 MAX_ROLES = 3
 SORT_MODES = ("name", "scope", "tier", "expiry")
 
 
-class RolesScreen(Screen):
+class RolesScreen(VimNavMixin, Screen):
     """Fuzzy-filter and multiselect eligible PIM roles."""
 
     BINDINGS = [
@@ -323,26 +324,6 @@ class RolesScreen(Screen):
         sl.select_all()
         self._rebuilding = False
         self._update_status()
-
-    def action_vim_down(self) -> None:
-        w = self.focused
-        if w is not None and hasattr(w, "action_cursor_down"):
-            w.action_cursor_down()
-
-    def action_vim_up(self) -> None:
-        w = self.focused
-        if w is not None and hasattr(w, "action_cursor_up"):
-            w.action_cursor_up()
-
-    def action_vim_top(self) -> None:
-        w = self.focused
-        if w is not None and hasattr(w, "scroll_home"):
-            w.scroll_home(animate=False)
-
-    def action_vim_bottom(self) -> None:
-        w = self.focused
-        if w is not None and hasattr(w, "scroll_end"):
-            w.scroll_end(animate=False)
 
     def action_proceed(self) -> None:
         if self.focused is self.query_one("#filter"):
