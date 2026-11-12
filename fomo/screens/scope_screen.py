@@ -145,12 +145,7 @@ class ScopeScreen(Screen):
     @work(thread=True)
     def _load_subs(self) -> None:
         try:
-            if getattr(self.app, "demo_mode", False):
-                from fomo import demo as demo_data
-
-                subs = demo_data.list_subscriptions()
-            else:
-                subs = azure.list_subscriptions()
+            subs = self.app.backend.list_subscriptions()  # type: ignore[attr-defined]
             self.app.call_from_thread(self._show_subs, subs)
         except Exception as exc:
             self.app.call_from_thread(self._show_error, str(exc))
@@ -252,15 +247,6 @@ class ScopeScreen(Screen):
 
     @work(thread=True)
     def _load_entra_roles(self) -> None:
-        if getattr(self.app, "demo_mode", False):
-            from fomo import demo as demo_data
-
-            roles = demo_data.list_entra_eligible_roles()
-            if not tiering._entra_index:
-                tiering.load_entra()
-            self.app.call_from_thread(self._on_entra_roles_loaded, roles)
-            return
-
         def _on_device_code(message: str) -> None:
             url, _, code = message.partition("\n")
 
@@ -275,7 +261,7 @@ class ScopeScreen(Screen):
             self.app.call_from_thread(_update)
 
         try:
-            roles = azure.list_entra_eligible_roles(
+            roles = self.app.backend.list_entra_eligible_roles(  # type: ignore[attr-defined]
                 on_device_code=_on_device_code,
                 stop_event=self._stop_event,
             )

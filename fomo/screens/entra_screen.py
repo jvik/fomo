@@ -114,12 +114,7 @@ class EntraActivationScreen(Screen):
         for i, role in enumerate(self.roles):
             self.app.call_from_thread(self._set_status, i, "Activating…")
             try:
-                result = azure.activate_entra_role(
-                    role,
-                    justification,
-                    duration,
-                    dry_run=self.app.dry_run or getattr(self.app, "demo_mode", False),  # type: ignore[attr-defined]
-                )
+                result = self.app.backend.activate_entra_role(role, justification, duration)  # type: ignore[attr-defined]
                 status: str = result.get("status", "Submitted")
                 label: str | Text = self._format_status(status)
             except Exception as exc:

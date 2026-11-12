@@ -143,12 +143,7 @@ class ActivationScreen(Screen):
         for i, role in enumerate(self._sub_roles):
             self.app.call_from_thread(self._set_status, "roles-table", i, "Activating…")
             try:
-                result = azure.activate_role(
-                    role,
-                    justification,
-                    duration,
-                    dry_run=self.app.dry_run or getattr(self.app, "demo_mode", False),  # type: ignore[attr-defined]
-                )
+                result = self.app.backend.activate_role(role, justification, duration)  # type: ignore[attr-defined]
                 status: str = result.get("properties", {}).get("status", "Submitted")
                 label: str | Text = self._format_status(status)
             except Exception as exc:
@@ -162,12 +157,7 @@ class ActivationScreen(Screen):
         for i, role in enumerate(self._global_roles):
             self.app.call_from_thread(self._set_status, "global-roles-table", i, "Activating…")
             try:
-                result = azure.activate_role(
-                    role,
-                    justification,
-                    duration,
-                    dry_run=self.app.dry_run or getattr(self.app, "demo_mode", False),  # type: ignore[attr-defined]
-                )
+                result = self.app.backend.activate_role(role, justification, duration)  # type: ignore[attr-defined]
                 status = result.get("properties", {}).get("status", "Submitted")
                 label = self._format_status(status)
             except Exception as exc:

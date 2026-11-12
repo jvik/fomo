@@ -73,13 +73,8 @@ class AssignmentsScreen(Screen):
 
     @work(thread=True)
     def _load_azure(self) -> None:
-        if self.app.demo_mode:  # type: ignore[attr-defined]
-            from fomo import demo as demo_data
-
-            self.app.call_from_thread(self._on_azure_done, demo_data.list_active_arm_assignments())
-            return
         try:
-            assignments = azure.list_active_arm_assignments()
+            assignments = self.app.backend.list_active_arm_assignments()  # type: ignore[attr-defined]
         except Exception as exc:
             self.app.call_from_thread(self._on_azure_error, str(exc))
             return
@@ -120,12 +115,6 @@ class AssignmentsScreen(Screen):
 
     @work(thread=True)
     def _load_entra(self) -> None:
-        if self.app.demo_mode:  # type: ignore[attr-defined]
-            from fomo import demo as demo_data
-
-            self.app.call_from_thread(self._on_entra_done, demo_data.list_active_entra_assignments())
-            return
-
         def _on_device_code(message: str) -> None:
             url, _, code = message.partition("\n")
 
@@ -140,7 +129,7 @@ class AssignmentsScreen(Screen):
             self.app.call_from_thread(_update)
 
         try:
-            assignments = azure.list_active_entra_assignments(
+            assignments = self.app.backend.list_active_entra_assignments(  # type: ignore[attr-defined]
                 on_device_code=_on_device_code,
                 stop_event=self._stop_event,
             )

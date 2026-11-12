@@ -14,6 +14,7 @@ from textual.widgets import Button, Label
 from textual.worker import get_current_worker
 
 from fomo import azure
+from fomo.backend import Backend, make_backend
 from fomo.screens.scope_screen import ScopeScreen
 
 FOMO_DARK = Theme(
@@ -192,6 +193,7 @@ class PimApp(App):
         self.dry_run = dry_run
         self.entra = entra
         self.demo_mode = demo_mode
+        self.backend: Backend = make_backend(dry_run=dry_run, demo_mode=demo_mode)
         self.theme = "fomo-dark" if _system_is_dark() else "fomo-light"
         self._color_scheme_proc: subprocess.Popen | None = None
 
