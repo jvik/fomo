@@ -28,8 +28,10 @@ class RolesScreen(VimNavMixin, Screen):
     """Fuzzy-filter and multiselect eligible PIM roles."""
 
     BINDINGS = [
-        # Priority binding: Enter in the filter never reaches Input.Submitted;
-        # action_proceed moves focus from the filter to the list instead.
+        # Priority bindings: Enter in the filter never reaches Input.Submitted.
+        # check_action enables exactly one of the two, so the footer shows what
+        # Enter does: move from the filter to the list, or activate.
+        Binding("enter", "to_list", "To list", show=True, priority=True),
         Binding("enter", "proceed", "Activate selected", show=True, priority=True),
         Binding("escape", "app.pop_screen", "Back", show=True, priority=True),
         Binding("q", "app.pop_screen", "Back", show=False),
@@ -364,6 +366,22 @@ class RolesScreen(VimNavMixin, Screen):
         self._sort_mode = SORT_MODES[(SORT_MODES.index(self._sort_mode) + 1) % len(SORT_MODES)]
         self._rebuild_list(self.query_one("#filter", Input).value)
 
+    def _filter_has_focus(self) -> bool:
+        focused = self.focused
+        return isinstance(focused, Input) and focused.id == "filter"
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        # Enter is "to_list" while the filter has focus and "proceed" otherwise.
+        if action == "to_list":
+            return self._filter_has_focus()
+        if action == "proceed":
+            return not self._filter_has_focus()
+        return super().check_action(action, parameters)
+
+    def action_to_list(self) -> None:
+        """Enter in the filter: move focus to the list."""
+        self.action_focus_list()
+
     def action_focus_list(self) -> None:
         self.query_one("#role-list").focus()
 
@@ -380,9 +398,6 @@ class RolesScreen(VimNavMixin, Screen):
         self._update_status()
 
     def action_proceed(self) -> None:
-        if self.focused is self.query_one("#filter"):
-            self.action_focus_list()
-            return
         # Merge any pending visible selections
         if self.query_one("#role-list").display:
             sl = self.query_one("#role-list", SelectionList)

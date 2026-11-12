@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from typing import Any, Self
+
 from rich.segment import Segment
 from rich.style import Style
+from textual import events
 from textual.strip import Strip
 from textual.widgets import SelectionList
 from textual.widgets.option_list import OptionDoesNotExist
@@ -15,7 +19,30 @@ BUTTON_RIGHT = "▌"
 
 
 class FomoSelectionList(SelectionList):
-    """SelectionList that uses ○/◉ to distinguish unselected/selected."""
+    """SelectionList that uses ○/◉ to distinguish unselected/selected.
+
+    A list that gains focus, or is filled while it has focus, highlights its
+    first selectable row, so the first Space toggles something.  A list filled
+    after mount otherwise has no highlighted row at all.
+    """
+
+    def _highlight_first_enabled(self) -> None:
+        """Highlight the first enabled row if no row is highlighted."""
+        if self.highlighted is not None or self.option_count == 0:
+            return
+        first = next((i for i, option in enumerate(self.options) if not option.disabled), None)
+        if first is not None:
+            self.highlighted = first
+
+    def on_focus(self, _event: events.Focus) -> None:
+        self._highlight_first_enabled()
+
+    def add_options(self, items: Iterable[Any]) -> Self:
+        # Also covers add_option and set_options, which go through here.
+        super().add_options(items)
+        if self.has_focus:
+            self._highlight_first_enabled()
+        return self
 
     def render_line(self, y: int) -> Strip:
         line = super(SelectionList, self).render_line(y)

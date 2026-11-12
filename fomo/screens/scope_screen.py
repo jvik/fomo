@@ -34,8 +34,10 @@ class ScopeScreen(VimNavMixin, Screen):
     """First screen: select Azure subscriptions or Entra roles."""
 
     BINDINGS = [
-        # Priority binding: Enter in a filter input never reaches Input.Submitted;
-        # action_proceed moves focus from the filter to its list instead.
+        # Priority bindings: Enter in a filter input never reaches Input.Submitted.
+        # check_action enables exactly one of the two, so the footer shows what
+        # Enter does: move from the filter to its list, or proceed.
+        Binding("enter", "to_list", "To list", show=True, priority=True),
         Binding("enter", "proceed", "Proceed", show=True, priority=True),
         Binding("slash", "focus_filter", "Filter", show=True),
         Binding("escape", "escape_key", "Back to filter", show=False, priority=True),
@@ -483,6 +485,22 @@ class ScopeScreen(VimNavMixin, Screen):
     # Actions — tab-aware
     # ------------------------------------------------------------------
 
+    def _filter_has_focus(self) -> bool:
+        focused = self.focused
+        return isinstance(focused, Input) and focused.id in ("filter", "entra-filter")
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        # Enter is "to_list" while a filter has focus and "proceed" otherwise.
+        if action == "to_list":
+            return self._filter_has_focus()
+        if action == "proceed":
+            return not self._filter_has_focus()
+        return super().check_action(action, parameters)
+
+    def action_to_list(self) -> None:
+        """Enter in a filter: move focus to the list below it."""
+        self.action_focus_list()
+
     def action_focus_filter(self) -> None:
         if self._active_tab() == "tab-entra":
             self.query_one("#entra-filter").focus()
@@ -530,9 +548,6 @@ class ScopeScreen(VimNavMixin, Screen):
             self.action_focus_filter()
             return
         if self._active_tab() == "tab-entra":
-            if self.focused is self.query_one("#entra-filter"):
-                self.query_one("#entra-role-list").focus()
-                return
             selected_roles = [self.all_roles[i] for i in sorted(self._selected)]
             if not selected_roles:
                 self.notify("Select at least one role.", severity="warning")
@@ -554,9 +569,6 @@ class ScopeScreen(VimNavMixin, Screen):
 
             self.app.push_screen(EntraActivationScreen(selected_roles))
         else:
-            if self.focused is self.query_one("#filter"):
-                self.action_focus_list()
-                return
             selected_ids: list[str] = list(self._selected_ids)
             if not selected_ids:
                 self.notify("Select at least one subscription.", severity="warning")
