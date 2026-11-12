@@ -22,7 +22,7 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - [x] 04e feat(tui): help panel, footers, theme override
 - [x] 04f feat(tui): recent activations
 - [x] 04g feat(tui): parity and demo data (decision-gated)
-- [ ] 04z docs: regenerate screenshots (runner only)
+- [x] 04z docs: regenerate screenshots (runner only)
 - [ ] 05 feat(cli): additive flags (opt-in)
 - [ ] 06a fix(cli)!: contract changes for currently broken cases (opt-in per item)
 - [ ] 06b feat(cli)!: breaking contract changes (opt-in per item)
