@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -48,6 +49,11 @@ class TierInfo(TypedDict):
 # Module-level lookup dicts populated by load_azure() / load_entra()
 _azure_index: dict[str, TierInfo] = {}
 _entra_index: dict[str, TierInfo] = {}
+
+# Serialise ensure_*_loaded() so concurrent workers load each index once.
+# Separate locks keep an Azure load from blocking an Entra load.
+_azure_lock = threading.Lock()
+_entra_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +158,28 @@ def load_entra() -> None:
             log.warning("tiering: could not load Entra tiering data; blast-radius badges will be absent")
     _entra_index = _build_index(data)
     log.debug("tiering: loaded %d Entra role entries", len(_entra_index))
+
+
+def ensure_azure_loaded() -> None:
+    """Load the Azure tiering index unless it is already populated.
+
+    Thread-safe: concurrent callers wait for the first load instead of
+    starting their own.  An empty index (no data available) is retried on
+    the next call.
+    """
+    with _azure_lock:
+        if not _azure_index:
+            load_azure()
+
+
+def ensure_entra_loaded() -> None:
+    """Load the Entra tiering index unless it is already populated.
+
+    Thread-safe; see :func:`ensure_azure_loaded`.
+    """
+    with _entra_lock:
+        if not _entra_index:
+            load_entra()
 
 
 def get_azure_tier(role_definition_id: str) -> TierInfo | None:

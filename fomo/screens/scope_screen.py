@@ -265,8 +265,7 @@ class ScopeScreen(Screen):
                 on_device_code=_on_device_code,
                 stop_event=self._stop_event,
             )
-            if not tiering._entra_index:
-                tiering.load_entra()
+            tiering.ensure_entra_loaded()
             self.app.call_from_thread(self._on_entra_roles_loaded, roles)
         except Exception as exc:
             self.app.call_from_thread(self._on_entra_error, str(exc))

@@ -82,8 +82,7 @@ class RolesScreen(Screen):
         try:
             roles = self.app.backend.list_eligible_roles(sub_id)  # type: ignore[attr-defined]
             # Pre-warm tiering cache on the first worker that runs (no-op if already loaded).
-            if not tiering._azure_index:
-                tiering.load_azure()
+            tiering.ensure_azure_loaded()
             self.app.call_from_thread(self._on_roles_loaded, sub_id, roles)
         except Exception as exc:
             self.app.call_from_thread(self._on_roles_error, sub_id, str(exc))
