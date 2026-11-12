@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from copy import deepcopy
 from typing import Any
 
 import pytest
@@ -35,7 +36,11 @@ def make_app(monkeypatch: pytest.MonkeyPatch) -> Callable[..., PimApp]:
     """Build a PimApp with theme detection and the dbus watcher stubbed.
 
     Animations are off, so tab switches and scrolls don't wait for them.
+    The demo roles are copies: an activation marks its roles active, and
+    later tests must still see the original demo data.
     """
+    monkeypatch.setattr(demo, "_ROLES_BY_SCOPE", deepcopy(demo._ROLES_BY_SCOPE))
+    monkeypatch.setattr(demo, "_ENTRA_ROLES", deepcopy(demo._ENTRA_ROLES))
     monkeypatch.setattr(app_module, "_system_is_dark", lambda: True)
     monkeypatch.setattr(PimApp, "_watch_color_scheme", lambda self: None)
 
