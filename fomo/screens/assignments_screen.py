@@ -18,6 +18,11 @@ from fomo.screens._common import VimNavMixin, device_code_markup, safe_markup, w
 
 _COL_NAMES = ("Role", "Scope", "Expiry", "Type")
 
+_SESSION_EXPIRED = (
+    "[bold red]Azure session expired.[/bold red]\n\n"
+    "Run [bold]az login[/bold] in another terminal, then press [bold]r[/bold] to retry."
+)
+
 
 class AssignmentsScreen(VimNavMixin, Screen):
     """Show all currently active Azure ARM and Entra role assignments."""
@@ -33,6 +38,7 @@ class AssignmentsScreen(VimNavMixin, Screen):
         Binding("2", "sort_col(1)", "Sort: Scope", show=True),
         Binding("3", "sort_col(2)", "Sort: Expiry", show=True),
         Binding("4", "sort_col(3)", "Sort: Type", show=True),
+        Binding("r", "reload", "Reload", show=True),
     ]
 
     def __init__(self) -> None:
@@ -40,6 +46,9 @@ class AssignmentsScreen(VimNavMixin, Screen):
         self._stop_event = threading.Event()
         self._sort_col: dict[str, ColumnKey | str] = {}  # table id → last sorted column key
         self._sort_asc: dict[str, bool] = {}  # table id → ascending?
+        self._azure_loading = False
+        self._entra_loading = False
+        self._entra_failed = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -70,11 +79,48 @@ class AssignmentsScreen(VimNavMixin, Screen):
         self._stop_event.set()
 
     # ------------------------------------------------------------------
+    # Reload (r)
+    # ------------------------------------------------------------------
+
+    def action_reload(self) -> None:
+        """Load both tabs again, e.g. after ``az login`` or a new Graph sign-in.
+
+        A tab whose load is still running (such as a device-code sign-in) is
+        left alone.
+        """
+        if not self._azure_loading:
+            self._reset_tab("azure", "Loading Azure assignments…")
+            self._load_azure()
+        if not self._entra_loading:
+            if self._entra_failed:
+                # Otherwise the retry reuses the access token that just failed,
+                # even after the user deleted graph_token.json to sign in again.
+                azure.forget_graph_access_token()
+            self._reset_tab("entra", "Loading Entra assignments…")
+            self._load_entra()
+
+    def _reset_tab(self, prefix: str, loading_text: str) -> None:
+        """Empty one tab's table and show its spinner again."""
+        table = self.query_one(f"#{prefix}-table", DataTable)
+        table.clear()
+        table.display = False
+        tid = table.id or ""
+        self._sort_col.pop(tid, None)
+        self._sort_asc.pop(tid, None)
+        self._refresh_headers(table)
+        self.query_one(f"#{prefix}-spinner").display = True
+        self.query_one(f"#{prefix}-loading", Label).update(loading_text)
+
+    # ------------------------------------------------------------------
     # Azure ARM loading
     # ------------------------------------------------------------------
 
-    @work(thread=True)
     def _load_azure(self) -> None:
+        self._azure_loading = True
+        self._fetch_azure()
+
+    @work(thread=True)
+    def _fetch_azure(self) -> None:
         try:
             assignments = self.app.backend.list_active_arm_assignments()  # type: ignore[attr-defined]
         except Exception as exc:
@@ -83,6 +129,7 @@ class AssignmentsScreen(VimNavMixin, Screen):
         self.app.call_from_thread(self._on_azure_done, assignments)
 
     def _on_azure_done(self, assignments: list[azure.ActiveAssignment]) -> None:
+        self._azure_loading = False
         self.query_one("#azure-spinner").display = False
         label = self.query_one("#azure-loading", Label)
         if not assignments:
@@ -101,13 +148,11 @@ class AssignmentsScreen(VimNavMixin, Screen):
         table.focus()
 
     def _on_azure_error(self, msg: str) -> None:
+        self._azure_loading = False
         self.query_one("#azure-spinner").display = False
         body: str | Content
         if azure.is_auth_error(msg):
-            body = (
-                "[bold red]Azure session expired.[/bold red]\n\n"
-                "Run [bold]az login[/bold] in your terminal, then restart fomo."
-            )
+            body = _SESSION_EXPIRED
         else:
             body = safe_markup("[bold red]Error:[/bold red] $msg", msg=msg)
         self.query_one("#azure-loading", Label).update(body)
@@ -116,8 +161,12 @@ class AssignmentsScreen(VimNavMixin, Screen):
     # Entra (Graph) loading
     # ------------------------------------------------------------------
 
-    @work(thread=True)
     def _load_entra(self) -> None:
+        self._entra_loading = True
+        self._fetch_entra()
+
+    @work(thread=True)
+    def _fetch_entra(self) -> None:
         def _on_device_code(message: str) -> None:
             url, _, code = message.partition("\n")
 
@@ -136,6 +185,8 @@ class AssignmentsScreen(VimNavMixin, Screen):
             self.app.call_from_thread(self._on_entra_error, str(exc))
 
     def _on_entra_done(self, assignments: list[azure.ActiveEntraAssignment]) -> None:
+        self._entra_loading = False
+        self._entra_failed = False
         self.query_one("#entra-spinner").display = False
         label = self.query_one("#entra-loading", Label)
         if not assignments:
@@ -153,16 +204,17 @@ class AssignmentsScreen(VimNavMixin, Screen):
         table.display = True
 
     def _on_entra_error(self, msg: str) -> None:
+        self._entra_loading = False
+        self._entra_failed = True
         self.query_one("#entra-spinner").display = False
         body: str | Content
         if azure.is_auth_error(msg):
-            body = (
-                "[bold red]Azure session expired.[/bold red]\n\n"
-                "Run [bold]az login[/bold] in your terminal, then restart fomo."
-            )
+            body = _SESSION_EXPIRED
         elif azure.is_scope_error(msg):
             body = (
-                "[bold red]Missing Graph permissions.[/bold red]\n\nRe-run [bold]fomo --entra[/bold] to re-authorise."
+                "[bold red]Missing Graph permissions.[/bold red]\n\n"
+                "Sign in to Graph again: delete [bold]~/.cache/fomo/graph_token.json[/bold] "
+                "and press [bold]r[/bold] to retry."
             )
         else:
             body = safe_markup("[bold red]Error:[/bold red]\n\n$error", error=wrap_error_lines(msg))

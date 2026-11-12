@@ -13,7 +13,7 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - [x] 03b fix(tui): tiering can never break role loading
 - [x] 03c fix(security): --log redaction, token-cache permissions, Graph token lock
 - [x] 03d fix(tui): blank duration, Entra error wrap, dbus parsing
-- [ ] 03e fix(tui): auth-error classification, modal and Retry
+- [x] 03e fix(tui): auth-error classification, modal and Retry
 - [ ] 03f fix(azure): user lookup once, bounded loads, logged lookups, device-code hardening
 - [ ] 04a fix(tui): h/l tab switching, list highlight on focus, Enter in the filter
 - [ ] 04b feat(tui): activation screen layout, readable errors, consistent Escape
@@ -46,3 +46,5 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - 03c: beyond the brief, a caller waiting on `_graph_token_lock` gives up with "Authentication cancelled." once its `stop_event` is set, and a caller with a set `stop_event` never starts a device-code flow; otherwise a closed screen's worker could open a browser after the other flow ended. A screen that waits shows its loading state, not the other screen's code.
 - 03c: `_redact` also masks the raised `RuntimeError` text of `_run_az` (az stderr) and `_run_graph`, since the screens log it. `az account show`/`account list` bodies (user name, tenant) are still logged; only the token and profile calls skip the body.
 - 03d: `dbus-monitor` likely prints the SettingChanged value on one line as `variant       uint32 1` (dbus-print-message writes `variant ` before the inner value), so `_parse_color_scheme_line`, like the loop it replaced, probably never matches a real signal and live theme switching never fires; the `uint32`-first match was kept as-is (out of scope). `isdigit()` became `isdecimal()` there, because `int("²")` raised too.
+- 03e: loaders that fail together share one dialog via `PimApp.show_auth_error` (Retry runs each one's reload). Beyond the brief, the app's own Retry also reloads ScopeScreen's subscription list when it is empty, because without a session `az account list` returns `[]` instead of failing. The session check opens the dialog for expired, not_logged_in and mfa; the subscription and role loads only for expired/not_logged_in. The raw error line is cut to 200 characters so the dialog fits 80x24.
+- 03e: added `azure.forget_graph_access_token()`; Assignments `r` calls it when the Entra tab failed, otherwise "delete graph_token.json and press r" would reuse the in-memory access token for up to an hour. The man page got an `r` entry. ScopeScreen's inline subscription and Entra-tab session errors still say "restart fomo" (no reload key there).

@@ -183,6 +183,7 @@ class FakeAzure:
         self.mg_err: BaseException | str | None = None
         self.mg_roles_err: BaseException | str | None = None
         self.entra_err: BaseException | str | None = None
+        self.entra_assignments_err: BaseException | str | None = None
         self.auth_err: BaseException | str | None = None
         self.roles_err_sub: str | None = None
         self.roles_err: dict[str, BaseException | str] = {}  # subscription id → error
@@ -285,6 +286,8 @@ class FakeAzure:
         stop_event: Any = None,
     ) -> list[ActiveEntraAssignment]:
         self.calls.append(("list_active_entra_assignments",))
+        if self.entra_assignments_err is not None:
+            raise _exc(self.entra_assignments_err)
         return list(self.entra_assignments)
 
 

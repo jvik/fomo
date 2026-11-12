@@ -181,6 +181,10 @@ Return to the previous screen (Entra activation screen only).
 Sort the focused table by role, scope, expiry or type.
 Pressing the same key again reverses the order.
 .TP
+.B r
+Reload both tabs, for example after \fBaz login\fR or after deleting
+\fI~/.cache/fomo/graph_token.json\fR to sign in to Graph again.
+.TP
 .BR Escape \ /\  q
 Return to the subscription screen.
 .SS Navigation (list screens)

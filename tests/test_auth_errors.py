@@ -16,11 +16,13 @@ from typing import Any
 import pytest
 from textual.geometry import Region
 from textual.pilot import Pilot
-from textual.widgets import Label
+from textual.widgets import DataTable, Label
 
 from fomo import app as app_module
 from fomo import azure
 from fomo.app import AuthErrorModal, PimApp
+from fomo.azure import ActiveAssignment
+from fomo.screens.assignments_screen import AssignmentsScreen
 from fomo.screens.roles_screen import RolesScreen
 from fomo.screens.scope_screen import ScopeScreen
 from fomo.widgets import FomoSelectionList
@@ -372,5 +374,107 @@ def test_roles_screen_retry_reloads_only_the_failed_subscriptions(make_live_app,
             assert fake_azure.calls.count(("list_eligible_roles", "s1")) == 2
             assert fake_azure.calls.count(("list_eligible_roles", "s2")) == 1
             assert not _toasts(app)
+
+    asyncio.run(scenario())
+
+
+# ---------------------------------------------------------------------------
+# Assignments: re-authentication hints and the r (reload) key
+# ---------------------------------------------------------------------------
+
+
+async def _open_assignments(pilot: Pilot) -> AssignmentsScreen:
+    await _scope_ready(pilot)
+    screen = AssignmentsScreen()
+    await pilot.app.push_screen(screen)
+    return screen
+
+
+def test_assignments_r_reloads_both_tabs(make_live_app, fake_azure, monkeypatch) -> None:
+    async def scenario() -> None:
+        app = make_live_app()
+        async with app.run_test(size=SIZE) as pilot:
+            screen = await _open_assignments(pilot)
+            azure_table = screen.query_one("#azure-table", DataTable)
+            entra_table = screen.query_one("#entra-table", DataTable)
+            await wait_for(pilot, lambda: azure_table.row_count == 1 and entra_table.row_count == 1)
+            monkeypatch.setattr(azure, "_graph_token_cache", ("token", 9e9))
+            fake_azure.arm_assignments.append(
+                ActiveAssignment("Owner", "/subscriptions/s2", "Contoso Dev", None, "Activated")
+            )
+
+            await pilot.press("r")
+
+            await wait_for(
+                pilot,
+                lambda: (
+                    azure_table.row_count == 2
+                    and fake_azure.calls.count(("list_active_entra_assignments",)) == 2
+                    and entra_table.display
+                ),
+            )
+            assert fake_azure.calls.count(("list_active_arm_assignments",)) == 2
+            assert fake_azure.calls.count(("list_active_entra_assignments",)) == 2
+            # The rows are replaced, not appended.
+            assert entra_table.row_count == 1
+            # The Entra tab had loaded, so its Graph access token is kept.
+            assert azure._graph_token_cache == ("token", 9e9)
+
+    asyncio.run(scenario())
+
+
+def test_assignments_graph_scope_error_tells_how_to_sign_in_again(make_live_app, fake_azure, monkeypatch) -> None:
+    fake_azure.entra_assignments_err = "Insufficient privileges to complete the operation."
+
+    async def scenario() -> None:
+        app = make_live_app()
+        async with app.run_test(size=SIZE) as pilot:
+            screen = await _open_assignments(pilot)
+            label = screen.query_one("#entra-loading", Label)
+            await wait_for(pilot, lambda: "Missing Graph permissions" in str(label.visual))
+            assert str(label.visual) == (
+                "Missing Graph permissions.\n\n"
+                "Sign in to Graph again: delete ~/.cache/fomo/graph_token.json and press r to retry."
+            )
+            # The user deletes the token cache; the access token in memory must go too.
+            monkeypatch.setattr(azure, "_graph_token_cache", ("stale", 9e9))
+            fake_azure.entra_assignments_err = None
+
+            await pilot.press("r")
+
+            entra_table = screen.query_one("#entra-table", DataTable)
+            await wait_for(pilot, lambda: entra_table.display and entra_table.row_count == 1)
+            assert str(label.visual) == "Entra assignments  (1 found)"
+            assert azure._graph_token_cache is None
+
+    asyncio.run(scenario())
+
+
+def test_assignments_session_error_offers_r_to_retry(make_live_app, fake_azure, monkeypatch) -> None:
+    failures = [NOT_LOGGED_IN_MSG]
+    real = fake_azure.list_active_arm_assignments
+
+    def _arm() -> list[ActiveAssignment]:
+        if failures:
+            raise RuntimeError(failures.pop())
+        return real()
+
+    monkeypatch.setattr(azure, "list_active_arm_assignments", _arm)
+
+    async def scenario() -> None:
+        app = make_live_app()
+        async with app.run_test(size=SIZE) as pilot:
+            screen = await _open_assignments(pilot)
+            label = screen.query_one("#azure-loading", Label)
+            await wait_for(pilot, lambda: "session expired" in str(label.visual))
+            assert str(label.visual) == (
+                "Azure session expired.\n\nRun az login in another terminal, then press r to retry."
+            )
+
+            await pilot.press("r")
+
+            azure_table = screen.query_one("#azure-table", DataTable)
+            await wait_for(pilot, lambda: azure_table.display and azure_table.row_count == 1)
+            assert str(label.visual) == "Azure assignments  (1 found)"
 
     asyncio.run(scenario())

@@ -504,6 +504,18 @@ _graph_token_cache: tuple[str, float] | None = None
 _graph_token_lock = threading.RLock()
 
 
+def forget_graph_access_token() -> None:
+    """Drop the in-process Graph access token; the cached refresh token stays.
+
+    The next Graph call refreshes the token from ``graph_token.json`` or, if
+    the user has deleted that file to sign in again, starts a new device-code
+    sign-in.  Without this, a retry in the same session would keep using the
+    old access token for up to an hour.
+    """
+    global _graph_token_cache
+    _graph_token_cache = None
+
+
 def _get_tenant_id() -> str:
     """Return the tenant ID of the currently active Azure CLI account."""
     data = _run_az("account", "show")
