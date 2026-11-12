@@ -6,7 +6,7 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 
 - [x] 01 test: CLI characterization tests and Pilot smoke tests
 - [x] 02a chore: lint/type tooling, CI, lockfile, untrack _version.py
-- [ ] 02b refactor(cli): share logic across the three _cli_activate* functions
+- [x] 02b refactor(cli): share logic across the three _cli_activate* functions
 - [ ] 02c refactor(tui): de-duplicate screens, Backend, public imports
 - [ ] 02d docs: align README, man page and AGENTS.md with the code
 - [ ] 03a fix(tui): escape external text in markup
