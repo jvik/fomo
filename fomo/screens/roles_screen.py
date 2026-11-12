@@ -74,22 +74,37 @@ class RolesScreen(VimNavMixin, Screen):
 
     def on_mount(self) -> None:
         self.query_one("#split").display = False
+        self._load_tiering()
         for sub_id in self._sub_ids:
             self._load_roles_for_sub(sub_id)
 
     # ------------------------------------------------------------------
-    # Background loading (one worker per subscription, run in parallel)
+    # Background loading (one worker per subscription, run in parallel,
+    # plus one for the optional tier data)
     # ------------------------------------------------------------------
+
+    @work(thread=True)
+    def _load_tiering(self) -> None:
+        # Separate from the role fetches: tier data is optional, and loading
+        # it never raises, so it can neither delay nor fail the role list.
+        tiering.ensure_azure_loaded(allow_network=self.app.backend.allow_network)  # type: ignore[attr-defined]
+        self.app.call_from_thread(self._on_tiering_loaded)
 
     @work(thread=True)
     def _load_roles_for_sub(self, sub_id: str) -> None:
         try:
             roles = self.app.backend.list_eligible_roles(sub_id)  # type: ignore[attr-defined]
-            # Pre-warm tiering cache on the first worker that runs (no-op if already loaded).
-            tiering.ensure_azure_loaded()
-            self.app.call_from_thread(self._on_roles_loaded, sub_id, roles)
         except Exception as exc:
             self.app.call_from_thread(self._on_roles_error, sub_id, str(exc))
+            return
+        # Outside the try: a failure in the UI callback is not a fetch error
+        # and must not count this subscription a second time.
+        self.app.call_from_thread(self._on_roles_loaded, sub_id, roles)
+
+    def _on_tiering_loaded(self) -> None:
+        """Re-render the detail pane if the list appeared before the tier data."""
+        if self.is_attached and self.query_one("#split").display:
+            self._refresh_detail()
 
     def _on_roles_loaded(self, _sub_id: str, roles: list[azure.EligibleRole]) -> None:
         self.all_roles.extend(roles)
@@ -218,6 +233,15 @@ class RolesScreen(VimNavMixin, Screen):
             parts.append(f"{n_vis}/{n_total} shown")
         parts.append(f"sort: {self._sort_mode}")
         self.query_one("#status", Label).update("  ·  ".join(parts))
+
+    def _refresh_detail(self) -> None:
+        """Re-render the detail pane for the highlighted (or first listed) role."""
+        idx = self.query_one("#role-list", SelectionList).highlighted
+        role_idx = self._option_values[idx] if idx is not None and 0 <= idx < len(self._option_values) else None
+        if role_idx is None:
+            role_idx = next((v for v in self._option_values if v is not None), None)
+        if role_idx is not None:
+            self._update_detail(self.all_roles[role_idx])
 
     def _update_detail(self, role: azure.EligibleRole) -> None:
         """Render tier + security info for *role* in the right-hand detail pane."""

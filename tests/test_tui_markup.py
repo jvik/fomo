@@ -188,7 +188,10 @@ def test_entra_list_and_detail_render_verbatim(make_live_app, fake_azure, monkey
             entra_list = screen.query_one("#entra-role-list", FomoSelectionList)
             await wait_for(pilot, lambda: entra_list.option_count == 1)
             assert _prompts(entra_list) == ["Global Reader [legacy] - Permanent"]
-            detail = _text(screen.query_one("#entra-detail", Label))
+            detail_label = screen.query_one("#entra-detail", Label)
+            # Tier data loads in its own worker and may arrive after the list.
+            await wait_for(pilot, lambda: TIER_TEXT in _text(detail_label))
+            detail = _text(detail_label)
             assert "Global Reader [legacy]" in detail
             assert TIER_TEXT in detail
 
@@ -222,6 +225,7 @@ def test_entra_blast_radius_toast_renders_tier_text_verbatim(make_live_app, fake
             screen.action_next_tab()
             entra_list = screen.query_one("#entra-role-list", FomoSelectionList)
             await wait_for(pilot, lambda: entra_list.option_count == 1)
+            await wait_for(pilot, lambda: tiering.get_entra_tier("gr"))
             await _select_first_and_proceed(pilot, entra_list)
             await wait_for(pilot, lambda: isinstance(app.screen, EntraActivationScreen))
             await wait_for(pilot, lambda: _toasts(app))
@@ -248,7 +252,10 @@ def test_roles_screen_renders_role_scope_and_tier_text_verbatim(make_live_app, f
             role_list = screen.query_one("#role-list", FomoSelectionList)
             await wait_for(pilot, lambda: role_list.option_count == 1)
             assert _prompts(role_list) == ["Key Vault Administrator [preview]  —  rg-[x]  [expires 2030-01-31]"]
-            detail = _text(screen.query_one("#detail", Label))
+            detail_label = screen.query_one("#detail", Label)
+            # Tier data loads in its own worker and may arrive after the list.
+            await wait_for(pilot, lambda: TIER_TEXT in _text(detail_label))
+            detail = _text(detail_label)
             assert "Key Vault Administrator [preview]" in detail
             assert "rg-[x]" in detail
             assert TIER_TEXT in detail
@@ -287,6 +294,7 @@ def test_azure_blast_radius_toast_renders_tier_text_verbatim(make_live_app, fake
             await app.push_screen(screen)
             role_list = screen.query_one("#role-list", FomoSelectionList)
             await wait_for(pilot, lambda: role_list.option_count == 1)
+            await wait_for(pilot, lambda: tiering.get_azure_tier(KVA.role_definition_id))
             await _select_first_and_proceed(pilot, role_list)
             await wait_for(pilot, lambda: isinstance(app.screen, ActivationScreen))
             await wait_for(pilot, lambda: _toasts(app))

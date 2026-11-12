@@ -26,6 +26,10 @@ class Backend:
     backend that forces dry-run never submits a real request.
     """
 
+    #: Whether optional downloads (tier data) may use the network.  Screens
+    #: pass it to ``tiering.ensure_*_loaded``; demo mode reads only the cache.
+    allow_network: bool = True
+
     def __init__(self, dry_run: bool) -> None:
         self._dry_run = dry_run
 
@@ -101,6 +105,8 @@ class AzureBackend(Backend):
 
 class DemoBackend(Backend):
     """Static demo data from ``fomo.demo``; activation is always a dry run."""
+
+    allow_network = False
 
     def __init__(self) -> None:
         super().__init__(dry_run=True)

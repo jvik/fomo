@@ -237,7 +237,20 @@ class ScopeScreen(VimNavMixin, Screen):
         self._entra_loading = True
         self.query_one("#entra-spinner").display = True
         self.query_one("#entra-loading-label", Label).update("Loading Entra eligible roles…")
+        self._load_entra_tiering()
         self._load_entra_roles()
+
+    @work(thread=True)
+    def _load_entra_tiering(self) -> None:
+        # Separate from the role fetch: tier data is optional, and loading it
+        # never raises, so it can neither delay nor fail the role list.
+        tiering.ensure_entra_loaded(allow_network=self.app.backend.allow_network)  # type: ignore[attr-defined]
+        self.app.call_from_thread(self._on_entra_tiering_loaded)
+
+    def _on_entra_tiering_loaded(self) -> None:
+        """Re-render the detail pane if the list appeared before the tier data."""
+        if self.is_attached and self.query_one("#entra-split").display:
+            self._refresh_entra_detail()
 
     @work(thread=True)
     def _load_entra_roles(self) -> None:
@@ -254,10 +267,11 @@ class ScopeScreen(VimNavMixin, Screen):
                 on_device_code=_on_device_code,
                 stop_event=self._stop_event,
             )
-            tiering.ensure_entra_loaded()
-            self.app.call_from_thread(self._on_entra_roles_loaded, roles)
         except Exception as exc:
             self.app.call_from_thread(self._on_entra_error, str(exc))
+            return
+        # Outside the try: a failure in the UI callback is not a fetch error.
+        self.app.call_from_thread(self._on_entra_roles_loaded, roles)
 
     def _on_entra_roles_loaded(self, roles: list[azure.EntraEligibleRole]) -> None:
         self._entra_loaded = True
@@ -362,6 +376,14 @@ class ScopeScreen(VimNavMixin, Screen):
             lbl.update(f"[dim]No roles selected[/dim]{sort_tag}")
         else:
             lbl.update(f"[bold]{n}[/bold] role(s) selected{sort_tag}")
+
+    def _refresh_entra_detail(self) -> None:
+        """Re-render the detail pane for the highlighted (or first listed) role."""
+        idx = self.query_one("#entra-role-list", SelectionList).highlighted
+        if idx is None or not 0 <= idx < len(self._option_values):
+            idx = 0
+        if self._option_values:
+            self._update_entra_detail(self.all_roles[self._option_values[idx]])
 
     def _update_entra_detail(self, role: azure.EntraEligibleRole) -> None:
         detail_lbl = self.query_one("#entra-detail", Label)

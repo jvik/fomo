@@ -97,6 +97,15 @@ def _fetch_json(url: str) -> list | None:
         return None
 
 
+def _fetch_or_skip(kind: str, url: str, allow_network: bool) -> list:
+    """Fetch *url*, or return no data when the network is not allowed (demo mode)."""
+    if not allow_network:
+        log.info("tiering: network disabled; no cached %s tier data", kind)
+        return []
+    log.debug("tiering: fetching %s roles from GitHub", kind)
+    return _fetch_json(url) or []
+
+
 def _build_index(data: list) -> dict[str, TierInfo]:
     index: dict[str, TierInfo] = {}
     for item in data:
@@ -123,17 +132,17 @@ def _build_index(data: list) -> dict[str, TierInfo]:
 # ---------------------------------------------------------------------------
 
 
-def load_azure() -> None:
+def load_azure(allow_network: bool = True) -> None:
     """Load (or refresh) the Azure roles tiering index.
 
     Safe to call from a background thread.  Reads disk cache if fresh,
-    otherwise fetches from GitHub.  Populates the module-level lookup dict.
+    otherwise fetches from GitHub unless *allow_network* is False.
+    Populates the module-level lookup dict.
     """
     global _azure_index
     data = _load_disk_cache("azure")
     if data is None:
-        log.debug("tiering: fetching Azure roles from GitHub")
-        data = _fetch_json(_AZURE_URL) or []
+        data = _fetch_or_skip("azure", _AZURE_URL, allow_network)
         if data:
             _save_disk_cache("azure", data)
         else:
@@ -142,16 +151,15 @@ def load_azure() -> None:
     log.debug("tiering: loaded %d Azure role entries", len(_azure_index))
 
 
-def load_entra() -> None:
+def load_entra(allow_network: bool = True) -> None:
     """Load (or refresh) the Entra roles tiering index.
 
-    Safe to call from a background thread.
+    Safe to call from a background thread; see :func:`load_azure`.
     """
     global _entra_index
     data = _load_disk_cache("entra")
     if data is None:
-        log.debug("tiering: fetching Entra roles from GitHub")
-        data = _fetch_json(_ENTRA_URL) or []
+        data = _fetch_or_skip("entra", _ENTRA_URL, allow_network)
         if data:
             _save_disk_cache("entra", data)
         else:
@@ -160,26 +168,36 @@ def load_entra() -> None:
     log.debug("tiering: loaded %d Entra role entries", len(_entra_index))
 
 
-def ensure_azure_loaded() -> None:
+def ensure_azure_loaded(allow_network: bool = True) -> None:
     """Load the Azure tiering index unless it is already populated.
 
     Thread-safe: concurrent callers wait for the first load instead of
     starting their own.  An empty index (no data available) is retried on
-    the next call.
+    the next call.  Never raises: tier data is optional, so any failure is
+    logged and leaves the index empty.  With *allow_network* False (demo
+    mode) only the disk cache is read.
     """
     with _azure_lock:
-        if not _azure_index:
-            load_azure()
+        if _azure_index:
+            return
+        try:
+            load_azure(allow_network=allow_network)
+        except Exception:
+            log.warning("tiering: could not load Azure tier data; badges will be absent", exc_info=True)
 
 
-def ensure_entra_loaded() -> None:
+def ensure_entra_loaded(allow_network: bool = True) -> None:
     """Load the Entra tiering index unless it is already populated.
 
-    Thread-safe; see :func:`ensure_azure_loaded`.
+    Thread-safe and never raises; see :func:`ensure_azure_loaded`.
     """
     with _entra_lock:
-        if not _entra_index:
-            load_entra()
+        if _entra_index:
+            return
+        try:
+            load_entra(allow_network=allow_network)
+        except Exception:
+            log.warning("tiering: could not load Entra tier data; badges will be absent", exc_info=True)
 
 
 def get_azure_tier(role_definition_id: str) -> TierInfo | None:
