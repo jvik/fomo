@@ -92,6 +92,39 @@ class AuthErrorModal(ModalScreen):
         self.app.exit()
 
 
+# (namespace, key) of the portal SettingChanged signal seen so far.
+_ColorSchemeState = tuple[str | None, str | None]
+_COLOR_SCHEME_IDLE: _ColorSchemeState = (None, None)
+
+
+def _parse_color_scheme_line(state: _ColorSchemeState, line: str) -> tuple[_ColorSchemeState, str | None]:
+    """Feed one line of ``dbus-monitor`` output to the colour-scheme state machine.
+
+    The watcher waits for an ``org.freedesktop.appearance`` line, then a
+    ``color-scheme`` line, then a ``uint32 <n>`` line with the new value
+    (1 = dark, 2 = light).  Returns the next state and the theme to switch to,
+    or ``None``.  Malformed value lines are ignored.
+    """
+    namespace, key = state
+    line = line.strip()
+    if "org.freedesktop.appearance" in line:
+        return ("org.freedesktop.appearance", key), None
+    if namespace and "color-scheme" in line:
+        return (namespace, "color-scheme"), None
+    if namespace == "org.freedesktop.appearance" and key == "color-scheme":
+        # Next uint32 line is the new value
+        parts = line.split()
+        if len(parts) > 1 and parts[0] == "uint32" and parts[1].isdecimal():
+            scheme = int(parts[1])
+            if scheme == 1:
+                return _COLOR_SCHEME_IDLE, "fomo-dark"
+            if scheme == 2:
+                return _COLOR_SCHEME_IDLE, "fomo-light"
+            return _COLOR_SCHEME_IDLE, None
+        return state, None
+    return _COLOR_SCHEME_IDLE, None
+
+
 def _system_is_dark() -> bool:
     """Return True if the system prefers a dark colour scheme."""
     # Freedesktop portal — most reliable cross-DE method
@@ -255,31 +288,14 @@ class PimApp(App):
         )
         self._color_scheme_proc = proc
         assert proc.stdout is not None  # stdout=PIPE always provides a stream
-        namespace = None
-        key = None
+        state = _COLOR_SCHEME_IDLE
         try:
             for line in proc.stdout:
                 if worker.is_cancelled:
                     break
-                line = line.strip()
-                if "org.freedesktop.appearance" in line:
-                    namespace = "org.freedesktop.appearance"
-                elif namespace and "color-scheme" in line:
-                    key = "color-scheme"
-                elif namespace == "org.freedesktop.appearance" and key == "color-scheme":
-                    # Next uint32 line is the new value
-                    parts = line.split()
-                    if parts and parts[0] == "uint32" and parts[1].isdigit():
-                        scheme = int(parts[1])
-                        if scheme == 1:
-                            self.call_from_thread(setattr, self, "theme", "fomo-dark")
-                        elif scheme == 2:
-                            self.call_from_thread(setattr, self, "theme", "fomo-light")
-                        namespace = None
-                        key = None
-                else:
-                    namespace = None
-                    key = None
+                state, theme = _parse_color_scheme_line(state, line)
+                if theme is not None:
+                    self.call_from_thread(setattr, self, "theme", theme)
         finally:
             self._color_scheme_proc = None
             proc.wait()
