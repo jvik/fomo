@@ -1,7 +1,8 @@
 """fomo's private files on disk, and the recent activations kept in one of them.
 
 :func:`write_private_json` writes a file that only the user may read, such as
-the cached Graph refresh token or the state file.
+the cached Graph refresh token or the state file, and :func:`make_private`
+and :func:`make_fd_private` take others' access away from an existing one.
 
 The state file, ``$XDG_STATE_HOME/fomo/state.json`` (by default
 ``~/.local/state/fomo/state.json``), remembers the last few TUI activations
@@ -67,6 +68,62 @@ def write_private_json(path: str, payload: object) -> None:
         with contextlib.suppress(OSError):
             os.unlink(tmp)
         raise
+
+
+def _private_mode(st: os.stat_result) -> int | None:
+    """0600 for the user's own regular file, 0700 for their directory, if others may access it; else None."""
+    getuid = getattr(os, "getuid", None)  # not on Windows
+    if getuid is None or st.st_uid != getuid() or not stat.S_IMODE(st.st_mode) & 0o077:
+        return None
+    if stat.S_ISREG(st.st_mode):
+        return 0o600
+    if stat.S_ISDIR(st.st_mode):
+        return 0o700
+    return None
+
+
+def _fchmod_private(fd: int) -> None:
+    mode = _private_mode(os.fstat(fd))
+    if mode is not None:
+        os.fchmod(fd, mode)
+
+
+def make_fd_private(fd: int) -> None:
+    """Make the file open at *fd* 0600 if it's the user's own regular file and others may access it.
+
+    Anything else, such as a terminal or a pipe, is left alone.  Errors are
+    logged at debug level, never raised.
+    """
+    try:
+        _fchmod_private(fd)
+    except OSError as exc:
+        log.debug("could not make file descriptor %d private: %s", fd, exc)
+
+
+def make_private(path: str) -> None:
+    """Make an existing file 0600, or a directory 0700, of the user's if others may access it.
+
+    For files that older versions of fomo left readable by others.  A missing
+    path, a symlink (never followed), any other kind of file, and anything
+    owned by another user are left alone.  The mode is changed through a
+    descriptor opened with ``O_NOFOLLOW``, so a symlink swapped in after the
+    check isn't followed either.  Errors are logged at debug level, never raised.
+    """
+    try:
+        if _private_mode(os.lstat(path)) is None:
+            return
+        flags = os.O_RDONLY
+        for name in ("O_NOFOLLOW", "O_NONBLOCK", "O_CLOEXEC"):
+            flags |= getattr(os, name, 0)
+        fd = os.open(path, flags)
+        try:
+            _fchmod_private(fd)
+        finally:
+            os.close(fd)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        log.debug("could not make %s private: %s", path, exc)
 
 
 # ---------------------------------------------------------------------------

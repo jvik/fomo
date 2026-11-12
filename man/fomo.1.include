@@ -319,6 +319,12 @@ grep 'az rest' /tmp/fomo.log
 .EE
 .RE
 .PP
+\fBfomo\fR 1.16.0 and earlier could write the ARM access token and profile
+data into \fB\-\-log\fR files, and wrote the Graph token cache readable by
+others.
+\fBfomo\fR now makes the token cache, and a log file it reuses, readable
+only by you (mode 0600), but it cannot find your old log files: delete them.
+.PP
 .B Non-interactive (CLI) mode
 .PP
 Activate an Azure RBAC role on a subscription without the TUI

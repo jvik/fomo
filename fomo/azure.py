@@ -24,7 +24,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from fomo.state import write_private_json
+from fomo.state import make_private, write_private_json
 
 log = logging.getLogger(__name__)
 
@@ -575,6 +575,18 @@ def _save_token_cache(token_data: dict, tenant_id: str) -> None:
     payload["tenant_id"] = tenant_id
     payload["cached_at"] = time.time()
     write_private_json(_TOKEN_CACHE_PATH, payload)
+
+
+def make_token_cache_private() -> None:
+    """Make an existing token cache 0600 and its directory 0700, if others may read them.
+
+    Older versions of fomo could leave the cache readable by others until
+    the next token write; :func:`fomo.__main__.main` calls this at startup.
+    Symlinks and files of other users are left alone, and errors are only
+    logged (see :func:`fomo.state.make_private`).
+    """
+    make_private(os.path.dirname(_TOKEN_CACHE_PATH))
+    make_private(_TOKEN_CACHE_PATH)
 
 
 def _token_endpoint(tenant_id: str) -> str:

@@ -216,17 +216,34 @@ def test_log_file_is_created_private(run_cli: Callable[[list[str]], Any], tmp_pa
     assert _mode(path) == 0o600
 
 
-def test_existing_log_file_keeps_its_mode(run_cli: Callable[[list[str]], Any], tmp_path: Path, umask_022: None) -> None:
+def test_reused_log_file_is_made_private_but_not_a_fifo(
+    run_cli: Callable[[list[str]], Any], tmp_path: Path, umask_022: None
+) -> None:
+    # Older versions created the log 0644 and wrote tokens into it.
     path = tmp_path / "f.log"
     path.write_text("earlier run\n")
     path.chmod(0o644)
 
     with _bare_root_logger():
-        code, _, _ = run_cli(["--log", str(path), "--mg", "corp"])
+        code, out, err = run_cli(["--log", str(path), "--mg", "corp"])
 
     assert code == 2
-    assert _mode(path) == 0o644
-    assert path.read_text().startswith("earlier run\n")
+    assert out == []
+    assert err[-1] == "fomo: error: --mg requires -r/--reason for non-interactive activation"
+    assert _mode(path) == 0o600
+    assert path.read_text().startswith("earlier run\n")  # appended to, not truncated
+
+    fifo = tmp_path / "f.fifo"
+    os.mkfifo(fifo, 0o644)
+    reader = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)  # so that opening it to write doesn't block
+    try:
+        with _bare_root_logger():
+            code, _, _ = run_cli(["--log", str(fifo), "--mg", "corp"])
+    finally:
+        os.close(reader)
+
+    assert code == 2
+    assert _mode(fifo) == 0o644
 
 
 # ---------------------------------------------------------------------------
@@ -331,6 +348,100 @@ def test_token_cache_write_failure_keeps_the_old_cache(
 
     assert cache_path.read_text() == '{"refresh_token": "old"}'
     assert os.listdir(cache_path.parent) == ["graph_token.json"]  # temp file removed
+
+
+# ---------------------------------------------------------------------------
+# Token cache left by an older version
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def old_cache(cache_path: Path, umask_022: None) -> Path:
+    """A token cache as older versions left it: 0644, in a 0755 directory."""
+    cache_path.parent.mkdir(parents=True)
+    cache_path.write_text('{"refresh_token": "old"}')
+    cache_path.chmod(0o644)
+    return cache_path
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected_out"),
+    [
+        (["--demo"], []),
+        (
+            ["--entra", "Global Reader", "-r", "x", "--dry-run"],
+            ["Fetching Entra eligible roles…", "Activating 1 Entra role(s)…", "  • Global Reader… ✓ DryRun"],
+        ),
+    ],
+)
+def test_startup_makes_an_old_token_cache_private(
+    run_cli: Callable[[list[str]], Any],
+    fake_azure: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    old_cache: Path,
+    argv: list[str],
+    expected_out: list[str],
+) -> None:
+    from fomo.app import PimApp
+
+    monkeypatch.setattr(PimApp, "run", lambda self, *args, **kwargs: None)  # the TUI
+
+    code, out, err = run_cli(argv)
+
+    assert (code, out, err) == (0, expected_out, [])  # nothing new printed
+    assert _mode(old_cache) == 0o600
+    assert _mode(old_cache.parent) == 0o700
+    assert _mode(old_cache.parent.parent) == 0o755  # only fomo's own directory
+    assert old_cache.read_text() == '{"refresh_token": "old"}'
+
+
+def test_making_the_token_cache_private_leaves_symlinks_alone(
+    cache_path: Path, tmp_path: Path, umask_022: None
+) -> None:
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    victim = elsewhere / "victim.json"
+    victim.write_text("keep me")
+    victim.chmod(0o644)
+    (elsewhere / "graph_token.json").symlink_to(victim)
+    cache_path.parent.parent.mkdir(parents=True)
+    cache_path.parent.symlink_to(elsewhere)
+
+    azure.make_token_cache_private()
+
+    assert cache_path.parent.is_symlink()
+    assert cache_path.is_symlink()
+    assert _mode(elsewhere) == 0o755
+    assert _mode(victim) == 0o644
+    assert victim.read_text() == "keep me"
+
+
+def test_making_the_token_cache_private_skips_files_of_other_users(
+    old_cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    uid = os.getuid()
+    monkeypatch.setattr(os, "getuid", lambda: uid + 1)
+
+    azure.make_token_cache_private()
+
+    assert _mode(old_cache) == 0o644
+    assert _mode(old_cache.parent) == 0o755
+
+
+def test_making_the_token_cache_private_swallows_errors(
+    old_cache: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def _fchmod(fd: int, mode: int) -> None:
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(os, "fchmod", _fchmod)
+
+    with caplog.at_level(logging.DEBUG, logger="fomo.state"):
+        azure.make_token_cache_private()
+
+    assert _mode(old_cache) == 0o644
+    assert [record.levelno for record in caplog.records] == [logging.DEBUG, logging.DEBUG]
+    assert "Operation not permitted" in caplog.text
 
 
 # ---------------------------------------------------------------------------

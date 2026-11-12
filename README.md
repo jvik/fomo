@@ -135,6 +135,8 @@ fomo --log /tmp/fomo.log
 
 Logs include all `az rest` and Graph API calls and responses. Useful for troubleshooting.
 
+> **Upgrading from 1.16.0 or earlier?** Those versions could write your ARM access token and profile data into `--log` files, and wrote the Graph token cache readable by others. fomo now makes the token cache, and a log file it reuses, readable only by you (mode `0600`), but it can't find your old log files: delete them.
+
 ### Recent activations
 
 fomo remembers your last five TUI activations (the roles, the reason and the duration) and lists them on a third tab of the first screen, **Recent**, which appears after your first activation. Press `1`–`5` on the first screen (outside the filter fields) to start one again: fomo loads the same subscriptions or the Entra roles, selects the same roles and, if they are all still eligible and not active, opens the activation screen with the reason and duration filled in. Press `⏎` to activate, or change the reason or duration first. If a role is already active or no longer eligible, you get the role list with the others selected and a note saying which ones are missing.

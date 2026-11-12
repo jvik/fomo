@@ -365,9 +365,17 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.log:
-        # The log holds account details: create a new file private (0600).
-        # An existing file keeps its mode; it's the user's file.
-        os.close(os.open(args.log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600))
+        from fomo.state import make_fd_private
+
+        # The log holds account details: create a new file private (0600), and
+        # make a reused one private too (older versions left it readable by
+        # others).  Checked and changed through the descriptor, so both see
+        # the file being logged to; a terminal or pipe is left alone.
+        fd = os.open(args.log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            make_fd_private(fd)
+        finally:
+            os.close(fd)
         logging.basicConfig(
             filename=args.log,
             level=logging.DEBUG,
@@ -376,6 +384,11 @@ def main() -> None:
         )
     else:
         logging.disable(logging.CRITICAL)
+
+    from fomo import azure
+
+    # Older versions wrote the Graph token cache readable by others.
+    azure.make_token_cache_private()
 
     positional: list[str] = args.positional
 
