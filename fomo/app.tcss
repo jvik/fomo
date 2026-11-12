@@ -1,150 +1,17 @@
-/* fomo global styles */
+/* fomo global styles
 
-AuthErrorModal {
-    align: center middle;
-}
-
-/* 64 columns leave 58 for text (wrapped) and three 16-column buttons;
-   the whole dialog fits an 80x24 terminal. */
-#auth-error-dialog {
-    background: $surface;
-    border: thick $error;
-    padding: 1 2;
-    width: 64;
-    max-width: 100%;
-    height: auto;
-    max-height: 100%;
-}
-
-#auth-error-title {
-    width: 1fr;
-    text-style: bold;
-    color: $error;
-    margin-bottom: 1;
-}
-
-/* width: 1fr makes the labels wrap instead of running past the border. */
-#auth-error-body {
-    width: 1fr;
-    margin-bottom: 1;
-}
-
-#auth-error-message {
-    width: 1fr;
-}
-
-#auth-error-buttons {
-    height: auto;
-    margin-top: 1;
-}
-
-#auth-error-retry, #auth-error-ok {
-    width: 1fr;
-    margin-right: 1;
-}
-
-#auth-error-quit {
-    width: 1fr;
-}
-
-/* Roles screen "e": the subscriptions that failed to load.  The list
-   scrolls, so the dialog fits an 80x24 terminal however many failed. */
-LoadErrorsModal {
-    align: center middle;
-}
-
-#load-errors-dialog {
-    background: $surface;
-    border: thick $warning;
-    padding: 1 2;
-    width: 72;
-    max-width: 100%;
-    height: auto;
-    max-height: 100%;
-}
-
-#load-errors-title {
-    width: 1fr;
-    text-style: bold;
-    color: $text-warning;
-    margin-bottom: 1;
-}
-
-#load-errors-list {
-    height: auto;
-    max-height: 12;
-}
-
-.load-error {
-    width: 1fr;
-    margin-bottom: 1;
-}
-
-#load-errors-buttons {
-    height: auto;
-}
-
-#load-errors-retry {
-    width: 1fr;
-    margin-right: 1;
-}
-
-#load-errors-close {
-    width: 1fr;
-}
-
-/* Keys screen (? or F1): this screen's keys and the app-wide ones side by
-   side.  The longest list (the scope screen's) fits 80x24 with room to
-   spare; on smaller terminals the lists scroll. */
-KeysScreen {
-    align: center middle;
-}
-
-#keys-dialog {
-    background: $surface;
-    border: thick $primary;
-    border-title-color: $text;
-    border-title-style: bold;
-    padding: 1 3;
-    width: auto;
-    max-width: 100%;
-    height: auto;
-    max-height: 100%;
-}
-
-#keys-list {
-    width: auto;
-    height: auto;
-    max-height: 70vh;
-}
-
-#keys-columns {
-    width: auto;
-    height: auto;
-}
-
-.keys-column {
-    width: auto;
-    height: auto;
-}
-
-.keys-column:first-of-type {
-    margin-right: 6;
-}
-
-.keys-heading {
-    text-style: bold;
-    color: $text-muted;
-    margin-bottom: 1;
-}
-
-#keys-screen, #keys-app {
-    width: auto;
-}
-
-#keys-hint {
-    margin-top: 1;
-}
+   Spacing, the same on every screen:
+   - $gutter: columns between the screen's edges and its content.  Titles,
+     labels, filters, lists, tables, buttons and tab labels all start at
+     this x.  Also the gap between controls side by side.
+   - $gap: one blank row between sections (title, filter or form, list or
+     table, details, buttons, status line), under the header or tab bar
+     and above the footer.
+   - $inset: columns between a framed panel's border and its text.
+   Dialogs use the same values inside their border. */
+$gutter: 2;
+$gap: 1;
+$inset: 1;
 
 Screen {
     background: $surface;
@@ -155,15 +22,39 @@ Header {
     color: $foreground;
 }
 
-/* Shared layout */
+/* Screen content: the gutter at the sides, a blank row under the header or
+   the tabs and another above the footer. */
+#main, #recent-pane, #loading-area, #entra-loading-area, #activation, #assignment-tabs TabPane {
+    padding: $gap $gutter;
+}
+
+/* Tab labels line up with the content below them, and stand apart. */
+Tab {
+    padding: 0 $gutter;
+}
+
+/* A title or loading message above a section. */
+#loading-label, #recent-title, #azure-loading, #entra-loading {
+    margin-bottom: $gap;
+}
+
+/* A filter above its list. */
+#filter, #entra-filter {
+    margin-bottom: $gap;
+}
+
+/* A status line under a list. */
+#sel-count, #status, #entra-status, #recent-hint {
+    margin-top: $gap;
+}
+
+/* Scope screen, Azure tab */
 #main {
-    padding: 1 2;
     height: 1fr;
 }
 
 /* Loading / status labels */
 #loading-label {
-    margin: 1 0;
     color: $text-muted;
     text-style: italic;
 }
@@ -173,7 +64,6 @@ Header {
     height: auto;
     max-height: 2;
     color: $text-muted;
-    margin-top: 1;
 }
 
 /* Scope screen */
@@ -202,35 +92,31 @@ SelectionList > .selection-list--button-selected-highlighted {
     color: $text-success;
 }
 
-/* Roles screen */
-#filter {
-    margin: 1 0;
-}
-
-/* Split-view selection screens (roles + entra) */
+/* Split-view selection screens (roles + entra): the list on the left, its
+   details on the right.  The detail pane's border is the list's right
+   edge, so the list needs only a narrow margin there. */
 #loading-area {
-    padding: 1 2;
     height: 1fr;
 }
 
-#split {
+#split, #entra-split {
     height: 1fr;
 }
 
-#left-pane {
+#left-pane, #entra-left-pane {
     width: 2fr;
-    padding: 0 1;
+    padding: $gap $inset $gap $gutter;
 }
 
-#detail-pane {
+#detail-pane, #entra-detail-pane {
     width: 1fr;
     border-left: solid $panel;
-    padding: 1 2;
+    padding: $gap $gutter;
     overflow-y: auto;
     background: $boost;
 }
 
-#detail {
+#detail, #entra-detail {
     width: 1fr;
     height: auto;
 }
@@ -240,7 +126,6 @@ DataTable {
     height: auto;
     max-height: 14;
     border: round $panel;
-    margin-bottom: 1;
 }
 
 /* Activation screens, top to bottom: title, reason + duration, the role
@@ -248,12 +133,12 @@ DataTable {
    then a blank row above the footer.  The form and the buttons stay on
    screen at 80x24 even after failures. */
 #activation {
-    padding: 1 2;
     height: 1fr;
 }
 
 #title {
     height: 1;
+    margin-bottom: $gap;
 }
 
 #form {
@@ -264,17 +149,17 @@ DataTable {
     height: 3;
     content-align: left middle;
     color: $text-muted;
-    margin-right: 1;
-}
-
-#justification {
-    width: 1fr;
+    margin: 0 1 0 0;
 }
 
 /* All four edges: a partial margin-left would lose to the more specific
    "#form .form-label" rule, whose margin-right resets the whole margin. */
 #form #duration-label {
-    margin: 0 1 0 2;
+    margin: 0 1 0 $gutter;
+}
+
+#justification {
+    width: 1fr;
 }
 
 #duration {
@@ -283,6 +168,7 @@ DataTable {
 
 #roles-scroll {
     height: 1fr;
+    margin-top: $gap;
 }
 
 /* #roles-scroll only takes focus while rows are out of view.  Its tables'
@@ -296,14 +182,14 @@ DataTable {
 #roles-scroll DataTable {
     max-height: 999;
     overflow-x: hidden;
-    margin-bottom: 0;
 }
 
-/* Global assignments warning box */
+/* Global assignments warning box, under the subscription roles */
 #global-roles-box {
     height: auto;
     border: round $warning;
-    padding: 0 1;
+    padding: 0 $inset;
+    margin-top: $gap;
 }
 
 #global-roles-box Label {
@@ -317,16 +203,30 @@ DataTable {
     border: round $error;
     border-title-color: $error;
     background: $surface-darken-1;
+    padding: 0 $inset;
+    margin-top: $gap;
 }
 
 /* Bottom right: [Back] [Activate], the primary button rightmost. */
 #buttons {
     height: 3;
     align: right middle;
+    margin-top: $gap;
 }
 
 #btn-back {
-    margin-right: 2;
+    margin-right: $gutter;
+}
+
+/* Under 28 rows (ActivationScreenBase.VERTICAL_BREAKPOINTS) the title sits
+   right above the form and the details panel is shorter, so that the form,
+   a few table rows, the details and the buttons all fit an 80x24 terminal. */
+.-short #title {
+    margin-bottom: 0;
+}
+
+.-short #error-log {
+    max-height: 5;
 }
 
 /* Scope screen tabs */
@@ -344,12 +244,10 @@ DataTable {
 /* Recent tab: laid out like the Azure tab (padding, title, a framed list
    filling the space, a line under it), so nothing moves between tabs. */
 #recent-pane {
-    padding: 1 2;
     height: 1fr;
 }
 
 #recent-title {
-    margin: 1 0;
     color: $text-muted;
     text-style: italic;
 }
@@ -357,51 +255,22 @@ DataTable {
 #recent-list {
     height: 1fr;
     border: round $panel;
-    padding: 0 1;
+    padding: 0 $inset;
 }
 
 #recent-hint {
     width: 1fr;
-    margin-top: 1;
     color: $text-muted;
 }
 
 /* Entra tab pane within ScopeScreen */
 #entra-loading-area {
-    padding: 1 2;
     height: 1fr;
-}
-
-#entra-split {
-    height: 1fr;
-}
-
-#entra-left-pane {
-    width: 2fr;
-    padding: 0 1;
-}
-
-#entra-detail-pane {
-    width: 1fr;
-    border-left: solid $panel;
-    padding: 1 2;
-    overflow-y: auto;
-    background: $boost;
-}
-
-#entra-detail {
-    width: 1fr;
-    height: auto;
-}
-
-#entra-filter {
-    margin: 1 0;
 }
 
 #entra-status {
     height: 1;
     color: $text-muted;
-    margin-top: 1;
 }
 
 /* Assignments screen */
@@ -412,7 +281,133 @@ DataTable {
 #azure-table, #entra-table {
     height: 1fr;
     max-height: 100;
-    margin-top: 1;
+}
+
+/* Dialogs: centred, a thick frame, and the screen's spacing inside it. */
+AuthErrorModal, LoadErrorsModal, KeysScreen {
+    align: center middle;
+}
+
+#auth-error-dialog, #load-errors-dialog, #keys-dialog {
+    background: $surface;
+    padding: $gap $gutter;
+    max-width: 100%;
+    height: auto;
+    max-height: 100%;
+}
+
+/* A dialog's title, then a blank row. */
+#auth-error-title, #load-errors-title {
+    width: 1fr;
+    text-style: bold;
+    margin-bottom: $gap;
+}
+
+/* The buttons fill the dialog's width, a gutter apart, under a blank row. */
+#auth-error-buttons, #load-errors-buttons {
+    height: auto;
+    margin-top: $gap;
+}
+
+#auth-error-retry, #auth-error-ok, #load-errors-retry {
+    width: 1fr;
+    margin-right: $gutter;
+}
+
+#auth-error-quit, #load-errors-close {
+    width: 1fr;
+}
+
+/* 64 columns leave 58 for text (wrapped) and three 18-column buttons; the
+   whole dialog fits an 80x24 terminal. */
+#auth-error-dialog {
+    border: thick $error;
+    width: 64;
+}
+
+#auth-error-title {
+    color: $error;
+}
+
+/* width: 1fr makes the labels wrap instead of running past the border. */
+#auth-error-body {
+    width: 1fr;
+    margin-bottom: $gap;
+}
+
+#auth-error-message {
+    width: 1fr;
+}
+
+/* Roles screen "e": the subscriptions that failed to load.  The list
+   scrolls, so the dialog fits an 80x24 terminal however many failed. */
+#load-errors-dialog {
+    border: thick $warning;
+    width: 72;
+}
+
+#load-errors-title {
+    color: $text-warning;
+}
+
+#load-errors-list {
+    height: auto;
+    max-height: 12;
+}
+
+/* A blank row between the failures, none under the last one: the
+   buttons' own blank row follows. */
+.load-error {
+    width: 1fr;
+    margin-bottom: $gap;
+}
+
+.load-error:last-of-type {
+    margin-bottom: 0;
+}
+
+/* Keys screen (? or F1): this screen's keys and the app-wide ones side by
+   side.  The longest list (the scope screen's) fits 80x24 with room to
+   spare; on smaller terminals the lists scroll. */
+#keys-dialog {
+    border: thick $primary;
+    border-title-color: $text;
+    border-title-style: bold;
+    width: auto;
+}
+
+#keys-list {
+    width: auto;
+    height: auto;
+    max-height: 70vh;
+}
+
+#keys-columns {
+    width: auto;
+    height: auto;
+}
+
+.keys-column {
+    width: auto;
+    height: auto;
+}
+
+.keys-column:first-of-type {
+    margin-right: 6;
+}
+
+.keys-heading {
+    text-style: bold;
+    color: $text-muted;
+    margin-bottom: $gap;
+}
+
+#keys-screen, #keys-app {
+    width: auto;
+}
+
+#keys-hint {
+    margin-top: $gap;
 }
 
 .hidden {

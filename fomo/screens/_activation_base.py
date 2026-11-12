@@ -63,6 +63,10 @@ _MAX_DURATION_RE = re.compile(rf"(?i:max)[^\n]*?\b({_ISO_DURATION})\b")
 _MFA_RE = re.compile(r"MfaRule|\bMFA\b")
 _SHORT_ERROR_LENGTH = 40
 
+# The activation screens' full layout needs this many terminal rows to keep
+# two table rows in view with the details panel open (see app.tcss).
+_TALL_HEIGHT = 28
+
 
 def summarize_activation_error(message: str) -> str:
     """A short, human status for a failed activation.
@@ -305,6 +309,11 @@ class ActivationScreenBase(FomoScreen[ActivationResult[RoleT] | None], Generic[R
     ]
     _AFTER_RUN_ACTIONS: ClassVar[frozenset[str]] = frozenset({"done", "retry_failed", "assignments", "quit_app"})
 
+    # Below _TALL_HEIGHT rows the screen has the "-short" class, and app.tcss
+    # tightens the layout so that the form, a few table rows, the details
+    # panel and the buttons still fit (80x24 included).
+    VERTICAL_BREAKPOINTS = [(0, "-short"), (_TALL_HEIGHT, "-tall")]
+
     # Labels of the columns before Status.
     COLUMNS: ClassVar[tuple[str, ...]]
     # Logger and message used when an activation fails.
@@ -408,6 +417,12 @@ class ActivationScreenBase(FomoScreen[ActivationResult[RoleT] | None], Generic[R
         return chain
 
     def on_mount(self) -> None:
+        # Textual sets the VERTICAL_BREAKPOINTS class on the screen's first
+        # Resize, after the first layout: set it now, so that a short
+        # terminal doesn't see the tall layout for a frame.
+        tall = self.app.size.height >= _TALL_HEIGHT
+        self.set_class(tall, "-tall")
+        self.set_class(not tall, "-short")
         for table_id, roles in self._role_tables():
             table = self.query_one(f"#{table_id}", RoleTable)
             for label in (*self.COLUMNS, "Status"):

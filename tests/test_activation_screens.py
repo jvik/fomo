@@ -286,7 +286,8 @@ def test_buttons_bottom_right_and_tab_goes_from_duration_to_activate(make_live_a
 
 
 def test_a_long_role_list_is_a_tab_stop_while_it_overflows(make_live_app, fake_azure) -> None:
-    roles = [_arm(f"Role {i:02d}", SUB) for i in range(20)]
+    # 18 rows overflow at 80x24 and fit at 120x36.
+    roles = [_arm(f"Role {i:02d}", SUB) for i in range(18)]
 
     async def scenario() -> None:
         app = make_live_app()
