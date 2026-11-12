@@ -1,9 +1,10 @@
 """AzTier blast-radius tiering for Azure and Entra roles.
 
-Data source: https://github.com/emiliensocchi/azure-tiering
-Fetched on demand and cached for a week at ~/.cache/fomo/tiering_{azure,entra}.json;
-an older cached copy is used when a refresh fails.  Tier data is optional:
-loading it never raises, and without it the index is simply empty.
+Data source: https://github.com/emiliensocchi/azure-tiering at the commit in
+``_TIERING_REF``.  Fetched on demand and cached for a week at
+~/.cache/fomo/tiering_{azure,entra}.json; an older cached copy is used when a
+refresh fails.  Tier data is optional: loading it never raises, and without it
+the index is simply empty.
 """
 
 from __future__ import annotations
@@ -24,8 +25,18 @@ log = logging.getLogger(__name__)
 _CACHE_DIR = os.path.expanduser("~/.cache/fomo")
 _CACHE_TTL = 7 * 24 * 3600  # 1 week
 
-_AZURE_URL = "https://raw.githubusercontent.com/emiliensocchi/azure-tiering/main/Azure%20roles/tiered-azure-roles.json"
-_ENTRA_URL = "https://raw.githubusercontent.com/emiliensocchi/azure-tiering/main/Entra%20roles/tiered-entra-roles.json"
+# Upstream commit of emiliensocchi/azure-tiering that the tier data is read
+# from.  Pinned so that the risk labels shown before a privileged activation
+# only change with a fomo release, not whenever the third-party repo changes.
+# To bump it: pick a commit from
+# https://github.com/emiliensocchi/azure-tiering/commits/main, review the diff
+# of the two JSON files below since the current ref, and paste the full
+# 40-character SHA here.  Existing user caches pick up the new data once they
+# are older than _CACHE_TTL.
+_TIERING_REF = "4afd962a8db1c53d42fb6ef88a008c4b5d074ec9"
+_TIERING_BASE = f"https://raw.githubusercontent.com/emiliensocchi/azure-tiering/{_TIERING_REF}"
+_AZURE_URL = f"{_TIERING_BASE}/Azure%20roles/tiered-azure-roles.json"
+_ENTRA_URL = f"{_TIERING_BASE}/Entra%20roles/tiered-entra-roles.json"
 
 # Tier display metadata
 TIER_BADGE: dict[int, str] = {0: "🔴", 1: "🟠", 2: "🟡", 3: "🟢"}

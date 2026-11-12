@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import time
 
@@ -252,3 +253,15 @@ def test_stale_cache_is_used_without_network(monkeypatch, load, kind) -> None:
     _no_network(monkeypatch)
     load(allow_network=False)
     assert set(_index(kind)) == {"abc"}
+
+
+# ---------------------------------------------------------------------------
+# Pinned upstream ref
+# ---------------------------------------------------------------------------
+
+
+def test_tier_data_is_pinned_to_an_upstream_commit() -> None:
+    assert re.fullmatch(r"[0-9a-f]{40}", tiering._TIERING_REF)
+    for url in (tiering._AZURE_URL, tiering._ENTRA_URL):
+        assert url.startswith(f"https://raw.githubusercontent.com/emiliensocchi/azure-tiering/{tiering._TIERING_REF}/")
+        assert "/main/" not in url

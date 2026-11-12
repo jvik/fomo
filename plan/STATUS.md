@@ -10,7 +10,7 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - [x] 02c refactor(tui): de-duplicate screens, Backend, public imports
 - [x] 02d docs: align README, man page and AGENTS.md with the code
 - [x] 03a fix(tui): escape external text in markup
-- [ ] 03b fix(tui): tiering can never break role loading
+- [x] 03b fix(tui): tiering can never break role loading
 - [ ] 03c fix(security): --log redaction, token-cache permissions, Graph token lock
 - [ ] 03d fix(tui): blank duration, Entra error wrap, dbus parsing
 - [ ] 03e fix(tui): auth-error classification, modal and Retry
@@ -41,3 +41,5 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - 02d: argparse-manpage isn't installed in .venv, so the new `[FILES]` include section was only checked in a hand-built roff page (renders cleanly, examples complete); the runner's build is the first real check of where it lands. The existing `Step 1 \(em …` WORKFLOW headings render as `Step 1 —— …` (pre-existing, left as is).
 - 03a: the helper is `safe_markup(template, **values)` in `fomo/screens/_common.py` (`$name` placeholders via `Content.from_markup`). `textual.markup.escape` was rejected: it doubles a trailing backslash and leaves `[Legacy]`, `[ x ]` and `[$var]` unescaped, all of which Textual swallows. `DataTable` cells are now `rich.text.Text`, which has no ordering, so `AssignmentsScreen` sorts with `key=str`.
 - 03a: the device-code prompt uses a bare `[link]$url[/link]` tag, so the URL isn't a clickable hyperlink (pre-existing; `$` placeholders don't substitute inside tags, so a fix needs `Content.stylize` with a link style).
+- 03b: tier data now loads in its own worker alongside the role fetch, so on a slow first download (no fresh cache) a user who activates before it arrives gets no blast-radius warning. A UI-callback exception now surfaces as Textual's WorkerFailed crash instead of a fake fetch error. `Backend.allow_network` (False for demo) gates the download.
+- 03b: the cache isn't keyed by `_TIERING_REF`, so after a ref bump users keep the old data until the 7-day TTL expires. Demo mode no longer downloads tier data, so `scripts/screenshot.py` (04z) shows tier badges only if `~/.cache/fomo/tiering_*.json` exists. The man page's Network access/FILES text doesn't mention pinning, the stale fallback or offline demo (README only, per the brief).
