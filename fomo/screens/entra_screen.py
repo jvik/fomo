@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -45,7 +46,7 @@ class EntraActivationScreen(ActivationScreenBase[azure.EntraEligibleRole]):
         table.add_column("Expires")
         table.add_column("Status", width=36)
         for role in self.roles:
-            table.add_row(role.role_name, azure.format_expiry(role.expiry), "—")
+            table.add_row(Text(role.role_name), Text(azure.format_expiry(role.expiry)), "—")
         self.query_one("#justification").focus()
 
     def _role_tables(self) -> Sequence[tuple[str, Sequence[azure.EntraEligibleRole]]]:

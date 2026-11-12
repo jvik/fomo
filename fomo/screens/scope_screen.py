@@ -8,6 +8,7 @@ from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.content import Content
 from textual.screen import Screen
 from textual.widgets import (
     Footer,
@@ -22,7 +23,7 @@ from textual.widgets import (
 from textual.widgets.selection_list import Selection
 
 from fomo import azure, tiering
-from fomo.screens._common import VimNavMixin, device_code_markup
+from fomo.screens._common import VimNavMixin, device_code_markup, safe_markup
 from fomo.widgets import FomoSelectionList as SelectionList
 
 MAX_SUBSCRIPTIONS = 3
@@ -167,15 +168,17 @@ class ScopeScreen(VimNavMixin, Screen):
 
     def _show_error(self, msg: str) -> None:
         self.query_one("#spinner").display = False
+        body: str | Content
         if azure.is_auth_error(msg):
             body = (
                 "[bold red]Azure session expired.[/bold red]\n\n"
                 "Run [bold]az login[/bold] in your terminal, then restart fomo."
             )
         else:
-            body = (
-                f"[bold red]Error:[/bold red] {msg}\n\n"
-                "Is [bold]az[/bold] installed and are you logged in?  Run: [bold]az login[/bold]"
+            body = safe_markup(
+                "[bold red]Error:[/bold red] $msg\n\n"
+                "Is [bold]az[/bold] installed and are you logged in?  Run: [bold]az login[/bold]",
+                msg=msg,
             )
         self.query_one("#loading-label", Label).update(body)
 
@@ -191,9 +194,9 @@ class ScopeScreen(VimNavMixin, Screen):
         q = query.strip().lower()
         ordered = sorted(self._all_subs, key=lambda s: s.name.casefold(), reverse=self._subs_desc)
         for sub in ordered:
-            display = f"{sub.name}  [dim]{sub.id}[/dim]"
             if q and q not in f"{sub.name} {sub.id}".lower():
                 continue
+            display = safe_markup("$name  [dim]$id[/dim]", name=sub.name, id=sub.id)
             sl.add_option((display, sub.id, sub.id in self._selected_ids))
             self._visible_ids.add(sub.id)
         self._rebuilding = False
@@ -274,6 +277,7 @@ class ScopeScreen(VimNavMixin, Screen):
     def _on_entra_error(self, msg: str) -> None:
         self._entra_loading = False
         self.query_one("#entra-spinner").display = False
+        body: str | Content
         if azure.is_auth_error(msg):
             body = (
                 "[bold red]Azure session expired.[/bold red]\n\n"
@@ -284,7 +288,7 @@ class ScopeScreen(VimNavMixin, Screen):
                 line if len(line) <= 80 else "\n".join(msg[i : i + 80] for i in range(0, len(line), 80))
                 for line in msg.splitlines()
             )
-            body = f"[bold red]Error:[/bold red]\n\n{wrapped}"
+            body = safe_markup("[bold red]Error:[/bold red]\n\n$error", error=wrapped)
         self.query_one("#entra-loading-label", Label).update(body)
 
     # ------------------------------------------------------------------
@@ -312,8 +316,11 @@ class ScopeScreen(VimNavMixin, Screen):
             if q and q not in role.role_name.lower():
                 continue
             active_tag = " [bold green](active)[/bold green]" if role.is_active else ""
-            expiry_tag = f" [dim]- {azure.format_expiry(role.expiry)}[/dim]"
-            label = f"{role.role_name}{active_tag}{expiry_tag}"
+            label = safe_markup(
+                f"$name{active_tag} [dim]- $expiry[/dim]",
+                name=role.role_name,
+                expiry=azure.format_expiry(role.expiry),
+            )
             sl.add_option(Selection(label, idx, idx in self._selected))
             self._visible_indices.add(idx)
             self._option_values.append(idx)
@@ -364,9 +371,13 @@ class ScopeScreen(VimNavMixin, Screen):
 
         if not tier_info:
             detail_lbl.update(
-                f"[bold]{role.role_name}[/bold]{active_tag}\n"
-                f"Expires: [dim]{expiry}[/dim]\n\n"
-                f"[dim]No tiering data available for this role.[/dim]"
+                safe_markup(
+                    f"[bold]$name[/bold]{active_tag}\n"
+                    "Expires: [dim]$expiry[/dim]\n\n"
+                    "[dim]No tiering data available for this role.[/dim]",
+                    name=role.role_name,
+                    expiry=expiry,
+                )
             )
             return
 
@@ -381,12 +392,12 @@ class ScopeScreen(VimNavMixin, Screen):
         parts: list[str] = [
             f"{badge} [bold {col}]Tier {tier}[/bold {col}]  [dim]{tlabel}[/dim]",
             "",
-            f"[bold]{role.role_name}[/bold]{active_tag}",
-            f"Expires: [dim]{expiry}[/dim]",
+            f"[bold]$name[/bold]{active_tag}",
+            "Expires: [dim]$expiry[/dim]",
         ]
         if attack and attack != "-":
-            parts.extend(["", f"[bold]{path_header}:[/bold]", attack])
-        detail_lbl.update("\n".join(parts))
+            parts.extend(["", f"[bold]{path_header}:[/bold]", "$attack"])
+        detail_lbl.update(safe_markup("\n".join(parts), name=role.role_name, expiry=expiry, attack=attack))
 
     def _select_all_entra_visible(self) -> None:
         self._selected.update(self._visible_indices)
@@ -465,6 +476,7 @@ class ScopeScreen(VimNavMixin, Screen):
                     f"Blast-radius warning: {len(high_risk)} high-risk role(s) selected\n{summary}",
                     severity="warning",
                     timeout=15,
+                    markup=False,
                 )
             from fomo.screens.entra_screen import EntraActivationScreen
 

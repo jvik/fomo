@@ -6,12 +6,13 @@ from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.content import Content
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, Label, LoadingIndicator
 from textual.widgets.selection_list import Selection
 
 from fomo import azure, tiering
-from fomo.screens._common import VimNavMixin
+from fomo.screens._common import VimNavMixin, safe_markup
 from fomo.widgets import FomoSelectionList as SelectionList
 
 MAX_ROLES = 3
@@ -102,7 +103,7 @@ class RolesScreen(VimNavMixin, Screen):
 
                 self.app.push_screen(AuthErrorModal())
         else:
-            self.notify(f"[{sub_id[:8]}…] {msg}", severity="error", timeout=8)
+            self.notify(f"[{sub_id[:8]}…] {msg}", severity="error", timeout=8, markup=False)
         self._increment_loaded()
 
     def _increment_loaded(self) -> None:
@@ -175,10 +176,12 @@ class RolesScreen(VimNavMixin, Screen):
                 display = f"{text}{expiry_tag}{active_tag}"
                 if q and q not in display.lower():
                     continue
+                # Plain text: the brackets in "[expires …]" are literal, not markup.
+                prompt = Content(display)
                 if role.is_active:
-                    sl.add_option(Selection(display, i, False, disabled=True))
+                    sl.add_option(Selection(prompt, i, False, disabled=True))
                 else:
-                    sl.add_option(Selection(display, i, i in self._selected))
+                    sl.add_option(Selection(prompt, i, i in self._selected))
                     self._visible_indices.add(i)
                 self._option_values.append(i)
 
@@ -226,10 +229,15 @@ class RolesScreen(VimNavMixin, Screen):
 
         if not tier_info:
             detail_lbl.update(
-                f"[bold]{role.role_name}[/bold]{active_tag}\n"
-                f"[dim]{scope}[/dim]\n"
-                f"Expires: [dim]{expiry}[/dim]\n\n"
-                f"[dim]No tiering data available for this role.[/dim]"
+                safe_markup(
+                    f"[bold]$name[/bold]{active_tag}\n"
+                    "[dim]$scope[/dim]\n"
+                    "Expires: [dim]$expiry[/dim]\n\n"
+                    "[dim]No tiering data available for this role.[/dim]",
+                    name=role.role_name,
+                    scope=scope,
+                    expiry=expiry,
+                )
             )
             return
 
@@ -244,13 +252,13 @@ class RolesScreen(VimNavMixin, Screen):
         parts: list[str] = [
             f"{badge} [bold {col}]Tier {tier}[/bold {col}]  [dim]{tlabel}[/dim]",
             "",
-            f"[bold]{role.role_name}[/bold]{active_tag}",
-            f"[dim]{scope}[/dim]",
-            f"Expires: [dim]{expiry}[/dim]",
+            f"[bold]$name[/bold]{active_tag}",
+            "[dim]$scope[/dim]",
+            "Expires: [dim]$expiry[/dim]",
         ]
         if attack and attack != "-":
-            parts.extend(["", f"[bold]{path_header}:[/bold]", attack])
-        detail_lbl.update("\n".join(parts))
+            parts.extend(["", f"[bold]{path_header}:[/bold]", "$attack"])
+        detail_lbl.update(safe_markup("\n".join(parts), name=role.role_name, scope=scope, expiry=expiry, attack=attack))
 
     # ------------------------------------------------------------------
     # Event handlers
@@ -349,6 +357,7 @@ class RolesScreen(VimNavMixin, Screen):
                 f"Blast-radius warning: {len(high_risk)} high-risk role(s) selected\n{summary}",
                 severity="warning",
                 timeout=15,
+                markup=False,
             )
 
         if len(selected_roles) > MAX_ROLES:

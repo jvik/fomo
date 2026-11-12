@@ -9,7 +9,7 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - [x] 02b refactor(cli): share logic across the three _cli_activate* functions
 - [x] 02c refactor(tui): de-duplicate screens, Backend, public imports
 - [x] 02d docs: align README, man page and AGENTS.md with the code
-- [ ] 03a fix(tui): escape external text in markup
+- [x] 03a fix(tui): escape external text in markup
 - [ ] 03b fix(tui): tiering can never break role loading
 - [ ] 03c fix(security): --log redaction, token-cache permissions, Graph token lock
 - [ ] 03d fix(tui): blank duration, Entra error wrap, dbus parsing
@@ -39,3 +39,5 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - 02c: the demo branches in ScopeScreen's Entra load and both AssignmentsScreen loads sat outside the `try`; with the Backend they now share the live path's `try`, which only matters if demo data raised. `PimApp._load_account_info` and the title still branch on `demo_mode` (app, not a screen). Screens reach the backend via `self.app.backend  # type: ignore[attr-defined]`.
 - 02c: `tiering.ensure_*_loaded()` keeps the old "reload while the index is empty" semantics (a failed fetch is retried by the next caller), now serialised per index; 03b may want to cache the failure.
 - 02d: argparse-manpage isn't installed in .venv, so the new `[FILES]` include section was only checked in a hand-built roff page (renders cleanly, examples complete); the runner's build is the first real check of where it lands. The existing `Step 1 \(em …` WORKFLOW headings render as `Step 1 —— …` (pre-existing, left as is).
+- 03a: the helper is `safe_markup(template, **values)` in `fomo/screens/_common.py` (`$name` placeholders via `Content.from_markup`). `textual.markup.escape` was rejected: it doubles a trailing backslash and leaves `[Legacy]`, `[ x ]` and `[$var]` unescaped, all of which Textual swallows. `DataTable` cells are now `rich.text.Text`, which has no ordering, so `AssignmentsScreen` sorts with `key=str`.
+- 03a: the device-code prompt uses a bare `[link]$url[/link]` tag, so the URL isn't a clickable hyperlink (pre-existing; `$` placeholders don't substitute inside tags, so a fix needs `Content.stylize` with a link style).

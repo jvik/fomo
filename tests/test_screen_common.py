@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
+from textual.content import Content
+
 from fomo.screens._common import device_code_markup, wrap_error_lines
 from tests.test_activation_screens import make_app  # noqa: F401  (fixture)
 from tests.test_tui_smoke import SIZE, _subs_loaded
@@ -19,12 +21,15 @@ def test_wrap_error_lines_custom_width() -> None:
 
 
 def test_device_code_markup() -> None:
-    assert device_code_markup("https://example.test/device", "ABC123") == (
+    content = device_code_markup("https://example.test/device", "ABC123")
+    expected = Content.from_markup(
         "[bold]Sign in to Microsoft Graph[/bold]\n\n"
         "[dim]1.[/dim] Open:  [link]https://example.test/device[/link]\n"
         "[dim]2.[/dim] Enter code:  [bold]ABC123[/bold]\n\n"
         "[dim]Waiting for authentication…[/dim]"
     )
+    # Content.__eq__ compares plain text only; compare the styling too.
+    assert (content.plain, content.spans) == (expected.plain, expected.spans)
 
 
 def test_vim_keys_move_the_focused_list(make_app) -> None:  # noqa: F811

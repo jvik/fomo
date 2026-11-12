@@ -131,7 +131,7 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
     ) -> None:
         """Activate *role* and show progress in its table row (worker thread)."""
         self.app.call_from_thread(self._set_status, table_id, row, "Activating…")
-        label: str | Text
+        label: Text
         try:
             label = self._format_status(self._activate(role, justification, duration))
         except Exception as exc:
@@ -139,7 +139,7 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
             self._log.error(self._FAILURE_LOG_MESSAGE, role.role_name, full_error)
             self._errors[error_index] = full_error
             short = full_error[:30] + "…" if len(full_error) > 30 else full_error
-            label = f"✗ {short}"
+            label = Text(f"✗ {short}")
             self.app.call_from_thread(self._append_error, role.role_name, full_error)
         self.app.call_from_thread(self._set_status, table_id, row, label)
 
@@ -148,14 +148,17 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
     # ------------------------------------------------------------------
 
     def _set_status(self, table_id: str, row: int, text: str | Text) -> None:
+        """Set a Status cell.  A str is parsed as Rich markup, so external text must be Text."""
         table = self.query_one(f"#{table_id}", DataTable)
         table.update_cell_at(Coordinate(row, self.STATUS_COLUMN), text)
 
     def _append_error(self, role_name: str, message: str) -> None:
         error_log = self.query_one("#error-log", RichLog)
         error_log.remove_class("hidden")
-        error_log.write(f"[bold red]✗ {role_name}[/bold red]")
-        error_log.write(message)
+        # Text objects are written as-is: neither the role name nor the error
+        # message is parsed as markup.
+        error_log.write(Text(f"✗ {role_name}", style="bold red"))
+        error_log.write(error_log.highlighter(Text(message)))
         error_log.write("")
 
     def _on_activation_done(self) -> None:
@@ -176,9 +179,9 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
     @staticmethod
     def _format_status(status: str) -> Text:
         if status in ("Provisioned", "Granted", "DryRun"):
-            return Text.from_markup(f"[bold green]✓ {status}[/bold green]")
+            return Text(f"✓ {status}", style="bold green")
         if "Pending" in status or status in ("Accepted", "ScheduleCreated"):
-            return Text.from_markup(f"[bold yellow]⏳ {status}[/bold yellow]")
+            return Text(f"⏳ {status}", style="bold yellow")
         if status in ("Failed", "Denied", "Canceled", "TimedOut"):
-            return Text.from_markup(f"[bold red]✗ {status}[/bold red]")
+            return Text(f"✗ {status}", style="bold red")
         return Text(status)

@@ -8,12 +8,13 @@ from rich.text import Text
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.content import Content
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Label, LoadingIndicator, TabbedContent, TabPane
 from textual.widgets.data_table import ColumnKey
 
 from fomo import azure
-from fomo.screens._common import VimNavMixin, device_code_markup, wrap_error_lines
+from fomo.screens._common import VimNavMixin, device_code_markup, safe_markup, wrap_error_lines
 
 _COL_NAMES = ("Role", "Scope", "Expiry", "Type")
 
@@ -91,23 +92,24 @@ class AssignmentsScreen(VimNavMixin, Screen):
         table = self.query_one("#azure-table", DataTable)
         for a in sorted(assignments, key=lambda x: (x.role_name, x.scope_display_name)):
             table.add_row(
-                a.role_name,
-                a.scope_display_name,
-                azure.format_expiry(a.expiry),
-                a.assignment_type,
+                Text(a.role_name),
+                Text(a.scope_display_name),
+                Text(azure.format_expiry(a.expiry)),
+                Text(a.assignment_type),
             )
         table.display = True
         table.focus()
 
     def _on_azure_error(self, msg: str) -> None:
         self.query_one("#azure-spinner").display = False
+        body: str | Content
         if azure.is_auth_error(msg):
             body = (
                 "[bold red]Azure session expired.[/bold red]\n\n"
                 "Run [bold]az login[/bold] in your terminal, then restart fomo."
             )
         else:
-            body = f"[bold red]Error:[/bold red] {msg}"
+            body = safe_markup("[bold red]Error:[/bold red] $msg", msg=msg)
         self.query_one("#azure-loading", Label).update(body)
 
     # ------------------------------------------------------------------
@@ -143,15 +145,16 @@ class AssignmentsScreen(VimNavMixin, Screen):
         table = self.query_one("#entra-table", DataTable)
         for a in sorted(assignments, key=lambda x: x.role_name):
             table.add_row(
-                a.role_name,
-                a.directory_scope_id,
-                azure.format_expiry(a.expiry),
-                a.assignment_type,
+                Text(a.role_name),
+                Text(a.directory_scope_id),
+                Text(azure.format_expiry(a.expiry)),
+                Text(a.assignment_type),
             )
         table.display = True
 
     def _on_entra_error(self, msg: str) -> None:
         self.query_one("#entra-spinner").display = False
+        body: str | Content
         if azure.is_auth_error(msg):
             body = (
                 "[bold red]Azure session expired.[/bold red]\n\n"
@@ -162,7 +165,7 @@ class AssignmentsScreen(VimNavMixin, Screen):
                 "[bold red]Missing Graph permissions.[/bold red]\n\nRe-run [bold]fomo --entra[/bold] to re-authorise."
             )
         else:
-            body = f"[bold red]Error:[/bold red]\n\n{wrap_error_lines(msg)}"
+            body = safe_markup("[bold red]Error:[/bold red]\n\n$error", error=wrap_error_lines(msg))
         self.query_one("#entra-loading", Label).update(body)
 
     # ------------------------------------------------------------------
@@ -176,7 +179,8 @@ class AssignmentsScreen(VimNavMixin, Screen):
         else:
             self._sort_col[tid] = col
             self._sort_asc[tid] = True
-        table.sort(col, reverse=not self._sort_asc[tid])
+        # Cells are rich Text objects, which don't order; sort by their plain text.
+        table.sort(col, key=str, reverse=not self._sort_asc[tid])
         self._refresh_headers(table)
 
     def _refresh_headers(self, table: DataTable) -> None:

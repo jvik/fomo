@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -59,9 +60,9 @@ class ActivationScreen(ActivationScreenBase[azure.EligibleRole]):
             table.add_column("Status", width=36)
             for role in roles:
                 table.add_row(
-                    role.role_name,
-                    role.scope_display_name,
-                    azure.format_expiry(role.expiry),
+                    Text(role.role_name),
+                    Text(role.scope_display_name),
+                    Text(azure.format_expiry(role.expiry)),
                     "—",
                 )
         self.query_one("#justification").focus()

@@ -49,7 +49,7 @@ fomo/
     entra_screen.py    # Entra activation screen
     assignments_screen.py  # Currently active Azure and Entra assignments (`i`)
     _activation_base.py    # Shared logic for the Azure and Entra activation screens
-    _common.py         # Shared screen helpers (Vim navigation, device-code markup, error wrapping)
+    _common.py         # Shared screen helpers (safe_markup, Vim navigation, device-code markup, error wrapping)
 hatch_build.py         # Hatchling build hook: generates man/fomo.1 from build_parser()
 man/fomo.1.include     # Hand-written man page sections (argparse-manpage include format)
 scripts/screenshot.py  # Regenerates docs/screenshots/*.svg in demo mode
@@ -64,6 +64,7 @@ tests/                 # pytest suite; conftest.py has the hermetic kill switch 
 - No external HTTP libraries — use `subprocess` + `az rest` for Azure Resource Manager.
   Exception: Microsoft Graph (Entra PIM) and the OAuth token endpoint are called with stdlib `urllib`, because `az`'s first-party app lacks the PIM Graph scope. Tier data is fetched with `urllib` from GitHub (`tiering.py`). Don't add other HTTP code.
 - `from __future__ import annotations` at the top of every module.
+- External text (Azure names and IDs, error messages, tiering data) never goes into Textual markup through an f-string: use `safe_markup("[bold]$name[/bold]", name=...)` from `screens/_common.py`, `Content(text)` for unstyled text, `rich.text.Text(text)` for `DataTable` cells and `RichLog`, and `notify(..., markup=False)`.
 
 ## CLI contract
 
