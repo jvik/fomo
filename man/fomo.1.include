@@ -4,33 +4,68 @@ Management (PIM) eligible role assignments.
 The application queries all eligible role assignments for the signed-in
 account and presents them in an interactive, filterable checklist.
 Multiple roles can be selected and activated in a single operation;
-each activation request is submitted in parallel so the overall wait
-time is bounded by the slowest individual role.
+the activation requests are submitted one after another, and each role's
+status is shown as it completes.
+.PP
+Both Azure RBAC roles (subscription, resource and management-group scope)
+and Microsoft Entra ID directory roles are supported.
+Management-group activation is only available in the non-interactive
+CLI mode (\fB\-\-mg\fR); the TUI has no management-group picker.
 .PP
 A non-interactive (CLI) mode is available when \fB\-r\fR/\fB\-\-reason\fR is
 supplied on the command line together with the role and scope arguments.
 This is useful for scripting and automation.
+In CLI mode an exact role name (case-insensitive) wins; otherwise every
+role whose name contains the given text is activated.
+Subscriptions match by name substring or exact ID, and every matching
+subscription is used.
+Roles that are already active are skipped.
 .PP
-Authentication is fully delegated to the active
+\fB\-\-demo\fR only affects the TUI.
+Combined with \fB\-r\fR/\fB\-\-reason\fR it is currently ignored, so the
+command performs a real activation; use \fB\-\-dry\-run\fR to simulate one.
+.PP
+.B Authentication.
+Azure Resource Manager calls go through
+.B az rest
+and use the active
 .BR az (1)
-CLI session — \fBfomo\fR never handles credentials or tokens directly.
+CLI session; \fBfomo\fR never sees those credentials.
 Run
 .B az login
 before using this tool.
+.PP
+Entra roles are managed through Microsoft Graph, which needs a scope that
+the Azure CLI's first-party application does not have.
+For these, \fBfomo\fR runs its own OAuth 2.0 device-code sign-in: it shows
+a URL and a code, opens the browser, and waits for you to sign in.
+The resulting access and refresh tokens are handled in-process and the
+refresh token is cached in \fI~/.cache/fomo/graph_token.json\fR
+(mode 0600), so later runs sign in silently.
+The device-code prompt comes back when the cached refresh token expires.
+Delete that file to force a fresh sign-in.
+.PP
+.B Network access.
+Besides Azure Resource Manager and Microsoft Graph, \fBfomo\fR downloads
+blast-radius tier data from the public
+.I emiliensocchi/azure-tiering
+GitHub repository and caches it for 7 days in \fI~/.cache/fomo/\fR.
 
 [WORKFLOW]
 .TP
 .B Step\~1\ \(em\ Select subscriptions
-A filterable list of Azure subscriptions is shown.
+A filterable list of Azure subscriptions is shown on the \fBAzure\fR tab.
 Select one or more subscriptions whose eligible roles you want to inspect.
 Press \fBEnter\fR to load roles.
 .TP
 .B Step\~2\ \(em\ Select roles
 All eligible PIM roles across the selected subscriptions are merged into a
 single filterable list.
-Type to narrow the list, use \fBSpace\fR to toggle individual items, then
-press \fBEnter\fR to proceed.
-Up to \fB3\fR roles may be selected.
+Type to narrow the list, use \fBSpace\fR or \fBx\fR to toggle individual
+items, then press \fBEnter\fR to proceed.
+Selecting more than \fB3\fR roles is allowed but shows a warning, because
+large batches can be slow and error-prone.
+Roles in a high blast-radius tier (Tier\~0 or Tier\~1) also trigger a warning.
 .TP
 .B Step\~3\ \(em\ Confirm and activate
 Enter a justification (required by Azure PIM), choose an activation duration,
@@ -38,30 +73,65 @@ and press the \fBActivate\fR button.
 Each role's activation status is shown in a live table.
 Global (management-group-scoped) roles are highlighted separately because
 they remain active across all subscriptions under that scope.
+.SS Entra tab
+The first screen has a second tab, \fBEntra\fR, listing your eligible
+Microsoft Entra ID directory roles.
+\fBfomo \-\-entra\fR opens the TUI directly on this tab.
+The roles are fetched through Microsoft Graph the first time the tab is
+shown; this may require the device-code sign-in described under
+\fBDESCRIPTION\fR (the URL and code are shown on screen).
+Already-active roles are marked.
+Select one or more roles and press \fBEnter\fR to continue to the Entra
+activation screen.
+.SS Entra activation
+Like Step\~3: enter a justification, choose a duration and press
+\fBActivate\fR.
+Each Entra role's status is shown in a live table.
+.SS Assignments screen
+Press \fBi\fR on the first screen to see your currently active Azure and
+Entra role assignments, on separate \fBAzure\fR and \fBEntra\fR tabs.
+The Entra tab may require the device-code sign-in.
 
 [KEY BINDINGS]
 Key bindings are shown in the footer of each screen and differ slightly
 between screens.
-.SS Subscription screen
+Letter keys act on the list; while a filter or text input has focus they
+are typed into it instead.
+.SS Subscription and Entra tab screen
 .TP
 .B Enter
-Load roles for the selected subscriptions.
+On the tab bar, move to the filter.
+In the filter, move to the list.
+In the list, load roles for the selected subscriptions (Azure tab) or
+continue to activation with the selected roles (Entra tab).
+.TP
+.BR x \ /\  Space
+Toggle the highlighted item.
 .TP
 .B a
-Select all subscriptions.
+Select all listed subscriptions (Azure tab) or all visible roles
+(Entra tab).
 .TP
 .B n
-Deselect all subscriptions.
+Deselect everything.
+.TP
+.B /
+Move focus to the filter input.
+.TP
+.B Escape
+Toggle focus between the filter input and the list.
 .TP
 .B Ctrl\-s
 Toggle subscription sort (A\(->Z / Z\(->A) on the Azure tab, or cycle the
 Entra role sort order (name, tier, expiry) on the Entra tab.
 .TP
-.BR Ctrl\-a
-Select all visible (filtered) subscriptions.
+.BR h \ /\  l
+Switch to the previous / next tab.
+The \fBLeft\fR and \fBRight\fR arrow keys do the same while the tab bar has
+focus.
 .TP
-.B /\fR,\fB\ Tab
-Move focus to the filter input.
+.B i
+Open the assignments screen.
 .TP
 .B q
 Quit.
@@ -69,71 +139,159 @@ Quit.
 .TP
 .B Enter
 Proceed to the activation screen with the selected roles.
+In the filter, move to the list instead.
 .TP
-.BR Ctrl\-a
+.BR x \ /\  Space
+Toggle the highlighted role.
+.TP
+.B a
 Select all visible (filtered) roles.
 .TP
 .B Ctrl\-s
-Cycle the sort order (name, scope, tier, expiry). Defaults to alphabetical.
+Cycle the sort order (name, scope, tier, expiry).
+Defaults to alphabetical.
 .TP
-.B /\fR,\fB\ Tab
+.B Tab
+Move focus from the filter to the list.
+.TP
+.B Shift\-Tab
+Move focus from the list to the filter.
+.TP
+.B /
 Move focus to the filter input.
 .TP
-.B Escape
+.BR Escape \ /\  q
 Return to the subscription screen.
-.SS Activation screen
+.SS Activation screens (Azure and Entra)
+.TP
+.B Enter
+In the justification field, move to the duration selector.
 .TP
 .B Escape
 Return to the role selection screen.
-.SS Navigation (all screens)
+On the Azure activation screen, the first \fBEscape\fR only leaves the
+justification field.
+Going back is not possible while an activation is running.
 .TP
-.BR j\fR\ /\ \fBk
+.B q
+Return to the previous screen (Entra activation screen only).
+.SS Assignments screen
+.TP
+.BR 1 \ /\  2 \ /\  3 \ /\  4
+Sort the focused table by role, scope, expiry or type.
+Pressing the same key again reverses the order.
+.TP
+.BR Escape \ /\  q
+Return to the subscription screen.
+.SS Navigation (list screens)
+.TP
+.BR j \ /\  k
 Move down / up (Vim-style).
 .TP
-.BR g\fR\ /\ \fBG
+.BR g \ /\  G
 Jump to first / last item.
 
 [EXAMPLES]
 Launch the interactive TUI:
 .PP
-.B "    fomo"
+.RS 4
+.EX
+fomo
+.EE
+.RE
 .PP
-Simulate the full activation flow without making any Azure API calls
-(useful for testing or demonstrations):
+Open the TUI on the Entra tab:
 .PP
-.B "    fomo --dry-run"
+.RS 4
+.EX
+fomo \-\-entra
+.EE
+.RE
+.PP
+Simulate the full activation flow without making any write calls
+(roles are still read from Azure):
+.PP
+.RS 4
+.EX
+fomo \-\-dry\-run
+.EE
+.RE
+.PP
+Explore the TUI with built-in demo data, no Azure account needed:
+.PP
+.RS 4
+.EX
+fomo \-\-demo
+.EE
+.RE
 .PP
 Capture verbose debug output to a file for troubleshooting:
 .PP
-.B "    fomo --log /tmp/fomo.log"
+.RS 4
+.EX
+fomo \-\-log /tmp/fomo.log
+.EE
+.RE
 .PP
 Then inspect the log:
 .PP
-.B "    grep 'az rest' /tmp/fomo.log"
+.RS 4
+.EX
+grep 'az rest' /tmp/fomo.log
+.EE
+.RE
 .PP
 .B Non-interactive (CLI) mode
 .PP
 Activate an Azure RBAC role on a subscription without the TUI
 (SUBSCRIPTION and ROLE names accept substrings):
 .PP
-.B "    fomo my-sub \"Key Vault Administrator\" -r \"Break-glass access\" -t 1h"
+.RS 4
+.EX
+fomo my-sub "Key Vault Administrator" \-r "Break-glass access" \-t 1h
+.EE
+.RE
 .PP
 Activate a role scoped to a management group:
 .PP
-.B "    fomo --mg my-mg \"Reader\" -r \"Audit review\" -t 30m"
+.RS 4
+.EX
+fomo \-\-mg my-mg "Reader" \-r "Audit review" \-t 30m
+.EE
+.RE
 .PP
 Activate a Microsoft Entra ID role:
 .PP
-.B "    fomo --entra \"Global Reader\" -r \"Audit review\" -t 1h"
+.RS 4
+.EX
+fomo \-\-entra "Global Reader" \-r "Audit review" \-t 1h
+.EE
+.RE
 .PP
-Dry-run a CLI activation (no real API calls):
+Dry-run a CLI activation (no write calls):
 .PP
-.B "    fomo my-sub \"Contributor\" -r \"Test\" --dry-run"
+.RS 4
+.EX
+fomo my-sub "Contributor" \-r "Test" \-\-dry\-run
+.EE
+.RE
+
+[FILES]
+.TP
+.I ~/.cache/fomo/graph_token.json
+Cached Microsoft Graph refresh token for Entra role management (mode 0600).
+Delete it to force a new device-code sign-in.
+.TP
+.I ~/.cache/fomo/tiering_azure.json\fR,\fI ~/.cache/fomo/tiering_entra.json
+Blast-radius tier data downloaded from the
+.I emiliensocchi/azure-tiering
+GitHub repository.
+Refreshed when older than 7 days.
 
 [ENVIRONMENT]
 .TP
-.B AZURE_CLI
-\fBfomo\fR delegates all Azure API calls to the
+.B PATH
+\fBfomo\fR makes all Azure Resource Manager calls through the
 .BR az (1)
 CLI.
 The
@@ -141,6 +299,10 @@ The
 executable must be on
 .B PATH
 and the session must be authenticated (\fBaz login\fR).
+.TP
+.B HOME
+The token and tiering caches live in \fI$HOME/.cache/fomo/\fR
+(see \fBFILES\fR).
 .TP
 .B TERM
 A terminal emulator that supports 256 colours and Unicode is recommended
