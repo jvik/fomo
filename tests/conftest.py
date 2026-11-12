@@ -50,6 +50,7 @@ def _hermetic(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> Any:
 
     monkeypatch.setattr(azure, "_TOKEN_CACHE_PATH", str(tmp_path / "graph_token.json"))
     monkeypatch.setattr(azure, "_graph_token_cache", None)
+    azure.reset_caches()  # the signed-in user ID is cached per process
 
     monkeypatch.setattr(tiering, "_CACHE_DIR", str(tmp_path))
     monkeypatch.setattr(tiering, "_azure_index", {})
@@ -58,6 +59,7 @@ def _hermetic(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> Any:
 
     yield
 
+    azure.reset_caches()
     # main() calls logging.disable(CRITICAL) globally; undo it.
     logging.disable(logging.NOTSET)
 

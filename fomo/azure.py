@@ -273,13 +273,40 @@ def format_expiry(expiry: str | None) -> str:
 # ---------------------------------------------------------------------------
 
 
+# The signed-in user's object ID, looked up once per process.  Role loads run
+# in parallel (one per subscription in the TUI); the lock makes them share one
+# ``az ad signed-in-user show`` instead of each starting its own.
+_current_user_id: str | None = None
+_current_user_lock = threading.Lock()
+
+
 def get_current_user() -> str:
     """Return the object ID of the currently signed-in user.
 
     Only the ``id`` is requested (``--query id`` returns it as a JSON string),
     so the rest of the profile (mail, phone) is never read or logged.
+
+    The ID is looked up once and then cached for the rest of the process;
+    concurrent callers wait for the first lookup.  A failed lookup is not
+    cached, so the next caller tries again.
     """
-    return _run_az("ad", "signed-in-user", "show", "--query", "id", log_body=False)
+    global _current_user_id
+    with _current_user_lock:
+        if _current_user_id is None:
+            _current_user_id = _run_az("ad", "signed-in-user", "show", "--query", "id", log_body=False)
+        return _current_user_id
+
+
+def reset_caches() -> None:
+    """Forget the per-process caches: the signed-in user ID and the Graph access token.
+
+    For tests, which must not see a value cached by an earlier test.  The
+    Graph refresh token on disk is left alone.
+    """
+    global _current_user_id
+    with _current_user_lock:
+        _current_user_id = None
+    forget_graph_access_token()
 
 
 def check_auth() -> None:
@@ -389,7 +416,7 @@ def list_eligible_roles(subscription_id: str) -> list[EligibleRole]:
         f"/providers/Microsoft.Authorization/roleEligibilityScheduleInstances"
         f"?$filter=asTarget()&api-version=2020-10-01"
     )
-    # Resolve the signed-in user's own object ID once.
+    # Resolve the signed-in user's own object ID (cached per process).
     # When a role eligibility is assigned to a group, the API returns the
     # group's principalId — but SelfActivate requires the requesting *user's*
     # object ID.  We always substitute the real user ID here so activation
