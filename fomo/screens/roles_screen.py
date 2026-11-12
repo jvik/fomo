@@ -9,7 +9,7 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, Label, LoadingIndicator
 from fomo.widgets import FomoSelectionList as SelectionList
-from textual.widgets._selection_list import Selection
+from textual.widgets.selection_list import Selection
 
 MAX_ROLES = 3
 SORT_MODES = ("name", "scope", "tier", "expiry")

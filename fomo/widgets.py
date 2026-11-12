@@ -7,8 +7,12 @@ from rich.style import Style
 
 from textual.strip import Strip
 from textual.widgets import SelectionList
-from textual.widgets._option_list import OptionDoesNotExist
-from textual.widgets._toggle_button import ToggleButton
+from textual.widgets.option_list import OptionDoesNotExist
+
+# Same half-block characters as Textual's ToggleButton.BUTTON_LEFT/BUTTON_RIGHT
+# (a private class), so the toggle keeps its look without the private import.
+BUTTON_LEFT = "▐"
+BUTTON_RIGHT = "▌"
 
 
 class FomoSelectionList(SelectionList):
@@ -43,9 +47,9 @@ class FomoSelectionList(SelectionList):
 
         return Strip(
             [
-                Segment(ToggleButton.BUTTON_LEFT, style=side_style),
+                Segment(BUTTON_LEFT, style=side_style),
                 Segment(inner, style=button_style),
-                Segment(ToggleButton.BUTTON_RIGHT, style=side_style),
+                Segment(BUTTON_RIGHT, style=side_style),
                 Segment(" ", style=underlying_style),
                 *line,
             ]

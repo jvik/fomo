@@ -21,7 +21,7 @@ from textual.widgets import (
 )
 
 from fomo.widgets import FomoSelectionList as SelectionList
-from textual.widgets._selection_list import Selection
+from textual.widgets.selection_list import Selection
 
 from rich.text import Text
 
