@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, NoReturn, Protocol, TypeVar
@@ -364,6 +365,9 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.log:
+        # The log holds account details: create a new file private (0600).
+        # An existing file keeps its mode; it's the user's file.
+        os.close(os.open(args.log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600))
         logging.basicConfig(
             filename=args.log,
             level=logging.DEBUG,

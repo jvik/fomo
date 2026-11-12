@@ -30,8 +30,29 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _run_az(*args: str) -> Any:
+# JSON keys whose values are credentials.  Matched anywhere in the key, so
+# ``accessToken``, ``access_token`` and ``refresh_token`` are all caught.
+_SECRET_VALUE_RE = re.compile(
+    r'("[^"\\]*(?:access_?token|refresh_?token|id_?token|client_secret|password)[^"\\]*"\s*:\s*)'
+    r'(?:"(?:[^"\\]|\\.)*(?:"|$)|[^\s,}\]]+)',
+    re.IGNORECASE,
+)
+
+
+def _redact(text: str) -> str:
+    """Mask the JSON values of credential keys (tokens, secrets, passwords) in *text*.
+
+    Works on any text, not only valid JSON, so a truncated body or an error
+    message that embeds JSON is still masked.
+    """
+    return _SECRET_VALUE_RE.sub(r'\1"***"', text)
+
+
+def _run_az(*args: str, log_body: bool = True) -> Any:
     """Run an `az` CLI command and return parsed JSON output.
+
+    Logged output is redacted with :func:`_redact`.  Pass ``log_body=False``
+    for calls whose output must never reach the log (tokens, profile data).
 
     Raises RuntimeError on non-zero exit or if `az` is not found.
     """
@@ -45,7 +66,7 @@ def _run_az(*args: str) -> Any:
     except FileNotFoundError:
         raise RuntimeError("Azure CLI not found. Install it: https://aka.ms/installazurecli") from None
     if result.returncode != 0:
-        msg = result.stderr.strip()
+        msg = _redact(result.stderr.strip())
         log.error(
             "az %s failed (exit %d):\n%s",
             " ".join(args),
@@ -53,7 +74,10 @@ def _run_az(*args: str) -> Any:
             msg,
         )
         raise RuntimeError(msg or f"az {' '.join(args)} exited {result.returncode}")
-    log.debug("az response: %s", result.stdout[:2000])
+    if log_body:
+        log.debug("az response: %s", _redact(result.stdout)[:2000])
+    else:
+        log.debug("az response: <%d characters, not logged>", len(result.stdout))
     return json.loads(result.stdout)
 
 
@@ -200,18 +224,22 @@ def format_expiry(expiry: str | None) -> str:
 
 
 def get_current_user() -> str:
-    """Return the object ID of the currently signed-in user."""
-    data = _run_az("ad", "signed-in-user", "show")
-    return data["id"]
+    """Return the object ID of the currently signed-in user.
+
+    Only the ``id`` is requested (``--query id`` returns it as a JSON string),
+    so the rest of the profile (mail, phone) is never read or logged.
+    """
+    return _run_az("ad", "signed-in-user", "show", "--query", "id", log_body=False)
 
 
 def check_auth() -> None:
     """Verify the az CLI session is valid by requesting a fresh token.
 
     Unlike `az account show`, this actually attempts a token refresh and
-    will raise RuntimeError if the session has expired.
+    will raise RuntimeError if the session has expired.  Only the expiry is
+    requested (``--query expiresOn``), so the access token never leaves `az`.
     """
-    _run_az("account", "get-access-token")
+    _run_az("account", "get-access-token", "--query", "expiresOn", log_body=False)
 
 
 def get_account_info() -> tuple[str, str]:
@@ -609,7 +637,8 @@ def _run_graph(method: str, url: str, body: str | None = None) -> Any:
             detail = json.loads(raw).get("error", {}).get("message", raw)
         except Exception:
             detail = raw
-        raise RuntimeError(detail) from None
+        # The message is shown to the user and logged by the screens.
+        raise RuntimeError(_redact(str(detail))) from None
 
 
 def _list_active_entra_role_def_ids(principal_id: str) -> frozenset[str]:
