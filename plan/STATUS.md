@@ -7,7 +7,7 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - [x] 01 test: CLI characterization tests and Pilot smoke tests
 - [x] 02a chore: lint/type tooling, CI, lockfile, untrack _version.py
 - [x] 02b refactor(cli): share logic across the three _cli_activate* functions
-- [ ] 02c refactor(tui): de-duplicate screens, Backend, public imports
+- [x] 02c refactor(tui): de-duplicate screens, Backend, public imports
 - [ ] 02d docs: align README, man page and AGENTS.md with the code
 - [ ] 03a fix(tui): escape external text in markup
 - [ ] 03b fix(tui): tiering can never break role loading
@@ -36,3 +36,5 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - 02a: CI `check` is now a Python matrix, so its status checks are named `check (3.11)`/`(3.12)`/`(3.13)`; update branch-protection required checks if they name `check`.
 - 02a: `license = "GPL-3.0-only"` matches the GPLv3 LICENSE text, which doesn't say "or later"; owner should confirm only vs or-later.
 - 02a: ruff excludes `plan/`, and `ruff format` excludes the frozen `tests/test_cli_contract.py`. The existing narrow `# type: ignore[attr-defined]` on `self.app.dry_run`/`demo_mode` were kept as-is; a typed `PimApp` accessor fits 02c.
+- 02c: the demo branches in ScopeScreen's Entra load and both AssignmentsScreen loads sat outside the `try`; with the Backend they now share the live path's `try`, which only matters if demo data raised. `PimApp._load_account_info` and the title still branch on `demo_mode` (app, not a screen). Screens reach the backend via `self.app.backend  # type: ignore[attr-defined]`.
+- 02c: `tiering.ensure_*_loaded()` keeps the old "reload while the index is empty" semantics (a failed fetch is retried by the next caller), now serialised per index; 03b may want to cache the failure.

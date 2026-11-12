@@ -22,6 +22,8 @@ class RolesScreen(VimNavMixin, Screen):
     """Fuzzy-filter and multiselect eligible PIM roles."""
 
     BINDINGS = [
+        # Priority binding: Enter in the filter never reaches Input.Submitted;
+        # action_proceed moves focus from the filter to the list instead.
         Binding("enter", "proceed", "Activate selected", show=True, priority=True),
         Binding("escape", "app.pop_screen", "Back", show=True, priority=True),
         Binding("q", "app.pop_screen", "Back", show=False),
@@ -271,12 +273,6 @@ class RolesScreen(VimNavMixin, Screen):
         sl = self.query_one("#role-list", SelectionList)
         self._selected.update(sl.selected)
         self._rebuild_list(event.value)
-
-    @on(Input.Submitted, "#filter")
-    def on_filter_submitted(self, event: Input.Submitted) -> None:  # noqa: ARG002
-        """Select all visible items and move focus to the list."""
-        self.action_select_all_visible()
-        self.query_one("#role-list").focus()
 
     @on(SelectionList.SelectedChanged, "#role-list")
     def on_selection_changed(self, event: SelectionList.SelectedChanged) -> None:

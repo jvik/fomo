@@ -33,6 +33,8 @@ class ScopeScreen(VimNavMixin, Screen):
     """First screen: select Azure subscriptions or Entra roles."""
 
     BINDINGS = [
+        # Priority binding: Enter in a filter input never reaches Input.Submitted;
+        # action_proceed moves focus from the filter to its list instead.
         Binding("enter", "proceed", "Proceed", show=True, priority=True),
         Binding("slash", "focus_filter", "Filter", show=True),
         Binding("escape", "escape_key", "Back to filter", show=False, priority=True),
@@ -224,18 +226,6 @@ class ScopeScreen(VimNavMixin, Screen):
     def on_filter_changed(self, event: Input.Changed) -> None:
         self._rebuild_list(event.value)
 
-    @on(Input.Submitted, "#filter")
-    def on_filter_submitted(self, event: Input.Submitted) -> None:  # noqa: ARG002
-        self._select_all_subs_visible()
-        self.query_one("#sub-list").focus()
-
-    def _select_all_subs_visible(self) -> None:
-        self._selected_ids.update(self._visible_ids)
-        sl = self.query_one("#sub-list", SelectionList)
-        self._rebuilding = True
-        sl.select_all()
-        self._rebuilding = False
-
     # ------------------------------------------------------------------
     # Entra — role loading
     # ------------------------------------------------------------------
@@ -336,11 +326,6 @@ class ScopeScreen(VimNavMixin, Screen):
     @on(Input.Changed, "#entra-filter")
     def on_entra_filter_changed(self, event: Input.Changed) -> None:
         self._rebuild_entra_list(event.value)
-
-    @on(Input.Submitted, "#entra-filter")
-    def on_entra_filter_submitted(self, event: Input.Submitted) -> None:  # noqa: ARG002
-        self._select_all_entra_visible()
-        self.query_one("#entra-role-list").focus()
 
     @on(SelectionList.SelectedChanged, "#entra-role-list")
     def on_entra_selection_changed(self, event: SelectionList.SelectedChanged) -> None:
