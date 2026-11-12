@@ -193,6 +193,7 @@ class FakeAzure:
         self.roles_err_sub: str | None = None
         self.roles_err: dict[str, BaseException | str] = {}  # subscription id → error
         self.fail_on: set[str] = set()
+        self.fail_messages: dict[str, str] = {}  # role name → activation error message
         self.device_code = False
 
         # Recordings
@@ -253,6 +254,8 @@ class FakeAzure:
     ) -> dict:
         self.activations.append((role.role_name, role.scope, duration, dry_run))
         self.justifications.append(justification)
+        if role.role_name in self.fail_messages:
+            raise RuntimeError(self.fail_messages[role.role_name])
         if role.role_name in self.fail_on:
             raise RuntimeError(f"ERROR: (Boom) {role.role_name} failed")
         return {"properties": {"status": "DryRun" if dry_run else "Provisioned"}}
@@ -266,6 +269,8 @@ class FakeAzure:
     ) -> dict:
         self.activations.append((role.role_name, role.directory_scope_id, duration, dry_run))
         self.justifications.append(justification)
+        if role.role_name in self.fail_messages:
+            raise RuntimeError(self.fail_messages[role.role_name])
         if role.role_name in self.fail_on:
             raise RuntimeError("Graph says no")
         return {"status": "DryRun" if dry_run else "Provisioned"}

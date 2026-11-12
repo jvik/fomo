@@ -72,6 +72,9 @@ Roles in a high blast-radius tier (Tier\~0 or Tier\~1) also trigger a warning.
 Enter a justification (required by Azure PIM), choose an activation duration,
 and press \fBEnter\fR or the \fBActivate\fR button.
 Each role's activation status is shown in a live table.
+A failed role shows a short reason there, such as
+"Exceeds max duration (PT4H)", and the full error appears in the
+\fBDetails\fR panel below the table.
 Global (management-group-scoped) roles are highlighted separately because
 they remain active across all subscriptions under that scope.
 .SS Entra tab

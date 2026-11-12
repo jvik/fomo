@@ -14,6 +14,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from textual.coordinate import Coordinate
 from textual.pilot import Pilot
 from textual.screen import Screen
 from textual.widgets import Button, DataTable, Input, RichLog, Select
@@ -21,7 +22,7 @@ from textual.widgets import Button, DataTable, Input, RichLog, Select
 from fomo import app as app_module
 from fomo.app import PimApp
 from fomo.azure import EligibleRole, EntraEligibleRole
-from fomo.screens._activation_base import fit_column_widths
+from fomo.screens._activation_base import fit_column_widths, summarize_activation_error
 from fomo.screens.activation_screen import ActivationScreen
 from fomo.screens.entra_screen import EntraActivationScreen
 from fomo.screens.scope_screen import ScopeScreen
@@ -268,6 +269,81 @@ def test_form_stays_on_screen_at_80x24_and_duration_keeps_its_height(make_live_a
             await pilot.pause()
             _assert_fully_on_screen(screen, "#justification", "#duration", "#error-log", "#btn-activate")
             assert screen.query_one("#duration").region.height >= 3
+
+    asyncio.run(scenario())
+
+
+# ---------------------------------------------------------------------------
+# Status cells and error details (F36)
+# ---------------------------------------------------------------------------
+
+ARM_EXPIRY = (
+    "ERROR: (RoleAssignmentRequestPolicyValidationFailed) The following policy rules failed: "
+    '["ExpirationRule"]. The requested duration of PT8H exceeds the maximum allowed PT4H.'
+)
+GRAPH_EXPIRY = (
+    'The following policy rules failed: ["ExpirationRule"]. '
+    "The requested activation duration exceeds the maximum allowed PT4H for this role."
+)
+
+
+@pytest.mark.parametrize(
+    ("message", "short"),
+    [
+        (ARM_EXPIRY, "Exceeds max duration (PT4H)"),
+        (GRAPH_EXPIRY, "Exceeds max duration (PT4H)"),
+        ("Policy says: MaximumDuration PT30M; ExpirationRule failed", "Exceeds max duration (PT30M)"),
+        ('The following policy rules failed: ["ExpirationRule"]', "Exceeds max duration"),
+        ('The following policy rules failed: ["JustificationRule"]', "Justification rejected by policy"),
+        ('The following policy rules failed: ["MfaRule"]', "MFA required"),
+        ("MFA is required to activate this role", "MFA required"),
+        ("ERROR: (RoleAssignmentExists) The Role assignment already exists.", "Already active"),
+        ("The role assignment Already Exists.", "Already active"),
+        ("ERROR: (AuthorizationFailed) The client 'x' does not have authorization", "Not authorized"),
+        ("ERROR: (Boom) Reader failed", "ERROR: (Boom) Reader failed"),
+        # Anything else: the first 40 characters.
+        ("ERROR: (InternalServerError) An unexpected error in PIM", "ERROR: (InternalServerError) An unexpect…"),
+        ("\n  ERROR: (Boom) first line  \nCode: Boom\n", "ERROR: (Boom) first line"),
+        ("", "Failed"),
+        # Not MFA: the word only counts in capitals and on its own.
+        ("Amfax said no", "Amfax said no"),
+    ],
+)
+def test_summarize_activation_error(message: str, short: str) -> None:
+    assert summarize_activation_error(message) == short
+
+
+def test_failure_shows_short_status_and_wrapped_details_at_80x24(make_live_app, fake_azure) -> None:
+    fake_azure.fail_messages = {"Global Reader": GRAPH_EXPIRY}
+    roles = [_entra(name) for name in ("Global Reader", "Security Reader", "Reports Reader")]
+
+    async def scenario() -> None:
+        app = make_live_app()
+        async with app.run_test(size=(80, 24)) as pilot:
+            screen = EntraActivationScreen(roles)
+            await _open(pilot, screen)
+            screen.query_one("#justification", Input).value = "why"
+            await pilot.click("#btn-activate")
+            await _wait_done(pilot, screen)
+            await pilot.pause()
+
+            table = screen.query_one("#roles-table", DataTable)
+            assert _status_cells(table, 2) == ["✗ Exceeds max duration (PT4H)", "✓ Provisioned", "✓ Provisioned"]
+            failed = table.get_cell_at(Coordinate(0, 2))
+            assert "red" in str(failed.style)
+            assert "green" in str(table.get_cell_at(Coordinate(1, 2)).style)
+            assert "✗ Exceeds max duration (PT4H)" in _rendered(table)
+
+            # The full message, word for word, wrapped to the panel's width.
+            error_log = screen.query_one("#error-log", RichLog)
+            await wait_for(pilot, lambda: len(error_log.lines) >= 3)
+            lines = [strip.text for strip in error_log.lines]
+            assert lines[0] == "✗ Global Reader"
+            assert len([line for line in lines if line.strip()]) >= 3  # the message wraps
+            for word in GRAPH_EXPIRY.split():
+                assert any(word in line for line in lines), (word, lines)
+            assert max(strip.cell_length for strip in error_log.lines) <= error_log.scrollable_content_region.width
+            _assert_fully_on_screen(screen, "#justification", "#duration", "#error-log")
 
     asyncio.run(scenario())
 

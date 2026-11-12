@@ -10,6 +10,7 @@ their title, tables and columns and how a role is activated.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Sequence
 from typing import ClassVar, Generic, TypeVar
 
@@ -35,6 +36,39 @@ _DURATION_OPTIONS: list[tuple[str, str]] = [
 ]
 
 RoleT = TypeVar("RoleT", azure.EligibleRole, azure.EntraEligibleRole)
+
+# An ISO 8601 duration such as PT4H, PT30M or P1DT12H.
+_ISO_DURATION = r"P(?=\d|T\d)(?:\d+[YMWD])*(?:T(?:\d+[HMS])+)?"
+# The first duration after "max"/"maximum": the policy's allowed maximum.
+_MAX_DURATION_RE = re.compile(rf"(?i:max)[^\n]*?\b({_ISO_DURATION})\b")
+_MFA_RE = re.compile(r"MfaRule|\bMFA\b")
+_SHORT_ERROR_LENGTH = 40
+
+
+def summarize_activation_error(message: str) -> str:
+    """A short, human status for a failed activation.
+
+    Recognises the common ARM and Microsoft Graph policy errors; anything else
+    is cut to the first 40 characters of its first line.  The details panel
+    always shows the full *message*.
+    """
+    if "ExpirationRule" in message:
+        match = _MAX_DURATION_RE.search(message)
+        return f"Exceeds max duration ({match.group(1)})" if match else "Exceeds max duration"
+    if "JustificationRule" in message:
+        return "Justification rejected by policy"
+    if _MFA_RE.search(message):
+        return "MFA required"
+    if "RoleAssignmentExists" in message or "already exists" in message.lower():
+        return "Already active"
+    if "AuthorizationFailed" in message:
+        return "Not authorized"
+    first_line = next((stripped for line in message.splitlines() if (stripped := line.strip())), "")
+    if not first_line:
+        return "Failed"
+    if len(first_line) <= _SHORT_ERROR_LENGTH:
+        return first_line
+    return first_line[:_SHORT_ERROR_LENGTH] + "…"
 
 
 def fit_column_widths(available: int, natural: Sequence[int], shrink: Sequence[tuple[int, int]]) -> list[int]:
@@ -283,8 +317,7 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
             full_error = str(exc)
             self._log.error(self._FAILURE_LOG_MESSAGE, role.role_name, full_error)
             self._errors[error_index] = full_error
-            short = full_error[:30] + "…" if len(full_error) > 30 else full_error
-            label = Text(f"✗ {short}")
+            label = Text(f"✗ {summarize_activation_error(full_error)}", style="bold red")
             self.app.call_from_thread(self._append_error, role.role_name, full_error)
         self.app.call_from_thread(self._set_status, table_id, row, label)
 
@@ -323,6 +356,11 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
 
     @staticmethod
     def _format_status(status: str) -> Text:
+        """Status cell for a submitted request: green ✓, yellow ⏳ (e.g. PendingApproval) or red ✗.
+
+        A failed request (an exception) gets a red ✗ and the summary from
+        :func:`summarize_activation_error` instead.
+        """
         if status in ("Provisioned", "Granted", "DryRun"):
             return Text(f"✓ {status}", style="bold green")
         if "Pending" in status or status in ("Accepted", "ScheduleCreated"):
