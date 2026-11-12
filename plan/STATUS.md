@@ -5,7 +5,7 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 ## Phases
 
 - [x] 01 test: CLI characterization tests and Pilot smoke tests
-- [ ] 02a chore: lint/type tooling, CI, lockfile, untrack _version.py
+- [x] 02a chore: lint/type tooling, CI, lockfile, untrack _version.py
 - [ ] 02b refactor(cli): share logic across the three _cli_activate* functions
 - [ ] 02c refactor(tui): de-duplicate screens, Backend, public imports
 - [ ] 02d docs: align README, man page and AGENTS.md with the code
@@ -32,3 +32,7 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 ## Notes
 
 - 01: REPORT.md §1 row E1 omits the first stdout line `Fetching Entra eligible roles…` (printed before the device-code block); test_E1 pins the real output. fake_azure also has `mg_roles_err` (M11) and `auth_err` (AuthErrorModal) toggles, and run_cli pins `COLUMNS=80` so the usage block is stable.
+- 02a: `release-type: simple` is duplicated in `.github/workflows/release-please.yml` and `release-please-config.json`; owner should decide which one is authoritative (left unchanged).
+- 02a: CI `check` is now a Python matrix, so its status checks are named `check (3.11)`/`(3.12)`/`(3.13)`; update branch-protection required checks if they name `check`.
+- 02a: `license = "GPL-3.0-only"` matches the GPLv3 LICENSE text, which doesn't say "or later"; owner should confirm only vs or-later.
+- 02a: ruff excludes `plan/`, and `ruff format` excludes the frozen `tests/test_cli_contract.py`. The existing narrow `# type: ignore[attr-defined]` on `self.app.dry_run`/`demo_mode` were kept as-is; a typed `PimApp` accessor fits 02c.

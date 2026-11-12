@@ -24,6 +24,20 @@ dry-run:
 test *args:
     uv run pytest {{args}}
 
+# Lint and check formatting (ruff)
+lint:
+    uv run ruff check .
+    uv run ruff format --check .
+
+# Auto-format and apply safe lint fixes (ruff)
+fmt:
+    uv run ruff check --fix .
+    uv run ruff format .
+
+# Type check the package (mypy)
+typecheck:
+    uv run mypy fomo
+
 # Regenerate SVG screenshots in docs/screenshots/
 screenshots:
     uv run python scripts/screenshot.py
