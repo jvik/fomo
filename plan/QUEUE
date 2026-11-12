@@ -1,0 +1,31 @@
+# Phases in run order. Columns: id  group  brief  [model]  [effort]
+# Optional model/effort override the defaults for that phase ("-" = default).
+# Comment a line out to skip it. The runner skips phases already ticked in STATUS.md.
+
+01   1  phases/01-characterization.md   -  -
+
+02a  2  phases/02a-tooling.md           -  -
+02b  2  phases/02b-refactor-cli.md      -  -
+02c  2  phases/02c-refactor-tui.md      -  -
+02d  2  phases/02d-docs.md              -  -
+
+03a  3  phases/03a-markup-escaping.md   -  -
+03b  3  phases/03b-tiering-isolation.md -  -
+03c  3  phases/03c-security.md          -  -
+03d  3  phases/03d-small-fixes.md       -  -
+03e  3  phases/03e-auth-errors.md       -  -
+03f  3  phases/03f-azure-robustness.md  -  -
+
+04a  4  phases/04a-navigation.md        -  -
+04b  4  phases/04b-activation-layout.md -  -
+04c  4  phases/04c-after-activation.md  -  -
+04d  4  phases/04d-polish.md            -  -
+04e  4  phases/04e-help-theme.md        -  -
+04f  4  phases/04f-recents.md           -  -
+04g  4  phases/04g-parity.md            -  -
+04z  4  phases/04z-screenshots.md       -  -
+
+# Opt-in: uncomment to run (also set the items in DECISIONS.md)
+#05  5  phases/05-cli-additive.md       -  -
+#06a 6  phases/06a-cli-contract-fixes.md -  -
+#06b 6  phases/06b-cli-breaking.md      -  -

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stub placed first on PATH by plan/run.sh: automated plan runs must never reach Azure.
+echo "ERROR: az is disabled during automated plan runs (see plan/RULES.md). Use --demo or test fakes." >&2
+exit 97
