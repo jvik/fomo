@@ -185,6 +185,7 @@ class FakeAzure:
         self.entra_err: BaseException | str | None = None
         self.auth_err: BaseException | str | None = None
         self.roles_err_sub: str | None = None
+        self.roles_err: dict[str, BaseException | str] = {}  # subscription id → error
         self.fail_on: set[str] = set()
         self.device_code = False
 
@@ -205,6 +206,8 @@ class FakeAzure:
         self.calls.append(("list_eligible_roles", subscription_id))
         if self.roles_err_sub == subscription_id:
             raise RuntimeError(f"role fetch failed for {subscription_id}")
+        if subscription_id in self.roles_err:
+            raise _exc(self.roles_err[subscription_id])
         return list(self.roles.get(subscription_id, []))
 
     def list_management_groups(self) -> list[ManagementGroup]:

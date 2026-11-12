@@ -22,7 +22,7 @@ import uuid
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 log = logging.getLogger(__name__)
 
@@ -83,33 +83,81 @@ def _run_az(*args: str, log_body: bool = True) -> Any:
     return json.loads(result.stdout)
 
 
-def is_auth_error(msg: str) -> bool:
-    """Return True if *msg* indicates an expired or missing Azure CLI session."""
+AuthErrorKind = Literal["expired", "not_logged_in", "mfa", "consent", "other"]
+
+# Lower-case markers of a missing OAuth scope or consent (Graph error codes).
+_SCOPE_ERROR_TOKENS = (
+    "permissionscopenotgranted",
+    "authorization_requestdenied",
+    "insufficient privileges",
+)
+
+# AADSTS error codes and the class each one belongs to.  A code decides the
+# class before any phrase does, because some messages borrow another class's
+# words: AADSTS70043 is an expired refresh token that mentions "conditional
+# access", and AADSTS50078 is an MFA claim that "has expired".
+_AADSTS_CODE_RE = re.compile(r"aadsts(\d+)", re.IGNORECASE)
+_AADSTS_KINDS: dict[str, AuthErrorKind] = {
+    "700082": "expired",
+    "70043": "expired",
+    "50173": "expired",
+    "700084": "expired",
+    "50133": "expired",
+    "50076": "mfa",
+    "50079": "mfa",
+    "50158": "mfa",
+    "53003": "mfa",
+    "50078": "mfa",
+    "65001": "consent",
+    "7000112": "consent",
+}
+_PLEASE_RUN_AZ_LOGIN_RE = re.compile(r"please run ['\"]?az login")
+
+
+def classify_auth_error(msg: str) -> AuthErrorKind:
+    """Classify an Azure CLI or Graph error message by what the user must do.
+
+    - ``expired``: the sign-in has expired or was revoked; ``az login`` again.
+    - ``not_logged_in``: there is no az session at all.
+    - ``mfa``: MFA, a compliant device or another Conditional Access
+      requirement blocks the request; a plain retry won't help.
+    - ``consent``: a scope or consent is missing (``is_scope_error``).
+    - ``other``: anything else, including ARM ``AuthorizationFailed``.
+
+    Known AADSTS codes are matched exactly and take precedence over phrases.
+    """
+    for code in _AADSTS_CODE_RE.findall(msg):
+        if code in _AADSTS_KINDS:
+            return _AADSTS_KINDS[code]
     lowered = msg.lower()
-    return any(
-        token in lowered
-        for token in (
-            "refresh token",
-            "aadsts",
-            "az login",
-            "not logged in",
-            "please run",
-            "unauthorized",
-        )
-    )
+    if "multi-factor" in lowered or "conditional access" in lowered:
+        return "mfa"
+    if any(token in lowered for token in _SCOPE_ERROR_TOKENS):
+        return "consent"
+    if "refresh token has expired" in lowered or "token is expired" in lowered:
+        return "expired"
+    if (
+        _PLEASE_RUN_AZ_LOGIN_RE.search(lowered)
+        or ("az login" in lowered and "not logged in" in lowered)
+        or "no subscription found" in lowered
+    ):
+        return "not_logged_in"
+    return "other"
+
+
+def is_auth_error(msg: str) -> bool:
+    """Return True if *msg* means the az CLI session has expired or is missing.
+
+    MFA, Conditional Access and consent errors are not session errors: signing
+    in again the same way doesn't fix them.  See :func:`classify_auth_error`.
+    """
+    return classify_auth_error(msg) in {"expired", "not_logged_in"}
 
 
 def is_scope_error(msg: str) -> bool:
     """Return True if *msg* indicates a missing OAuth scope / consent."""
     lowered = msg.lower()
-    return any(
-        token in lowered
-        for token in (
-            "permissionscopenotgranted",
-            "authorization_requestdenied",
-            "insufficient privileges",
-        )
-    )
+    return any(token in lowered for token in _SCOPE_ERROR_TOKENS)
 
 
 # ---------------------------------------------------------------------------
