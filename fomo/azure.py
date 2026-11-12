@@ -6,13 +6,11 @@ the Azure CLI session already active in the terminal.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 import os
 import re
 import shutil
-import stat
 import subprocess
 import sys
 import threading
@@ -25,6 +23,8 @@ import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
+
+from fomo.state import write_private_json
 
 log = logging.getLogger(__name__)
 
@@ -566,31 +566,15 @@ def _load_token_cache() -> dict | None:
 def _save_token_cache(token_data: dict, tenant_id: str) -> None:
     """Persist access + refresh tokens to disk, privately and atomically.
 
-    The cache directory (fomo's own) is made 0700.  The tokens go to a new
-    temp file that is created 0600, never through an existing file or
-    symlink, and then renamed over the cache path, so they are never
-    readable by others and a symlink at the path is replaced, not followed.
+    The cache directory (fomo's own) is made 0700 and the file 0600, through
+    a temp file that is renamed over the cache path, so the tokens are never
+    readable by others and a symlink at the path is replaced, not followed
+    (see :func:`fomo.state.write_private_json`).
     """
-    cache_dir = os.path.dirname(_TOKEN_CACHE_PATH)
-    os.makedirs(cache_dir, mode=0o700, exist_ok=True)
-    if stat.S_IMODE(os.stat(cache_dir).st_mode) & 0o077:
-        os.chmod(cache_dir, 0o700)
     payload = {k: token_data[k] for k in ("access_token", "refresh_token", "expires_in") if k in token_data}
     payload["tenant_id"] = tenant_id
     payload["cached_at"] = time.time()
-    tmp = f"{_TOKEN_CACHE_PATH}.{uuid.uuid4().hex}.tmp"
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    fd = os.open(tmp, flags, 0o600)
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(payload, f)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, _TOKEN_CACHE_PATH)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.unlink(tmp)
-        raise
+    write_private_json(_TOKEN_CACHE_PATH, payload)
 
 
 def _token_endpoint(tenant_id: str) -> str:

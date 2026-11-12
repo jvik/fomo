@@ -40,6 +40,7 @@ fomo/
   azure.py             # All Azure I/O: `az rest` for ARM, urllib for Graph/OAuth; dataclasses
   backend.py           # Backend: AzureBackend (real APIs) or DemoBackend (--demo) for the TUI
   demo.py              # Dummy data for --demo mode and screenshots
+  state.py             # fomo's private files: write_private_json (0600 file in a 0700 directory, atomic)
   tiering.py           # Blast-radius tier data (emiliensocchi/azure-tiering), fetched and cached
   timefmt.py           # Pure helpers for end times: "47m left", "14:32 (47m left)", dates
   widgets.py           # Custom Textual widgets (FomoSelectionList)
