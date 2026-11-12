@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from textual.widgets import Button, DataTable, Input, RichLog
+from textual.widgets import Button, DataTable, Input, RichLog, Select
 
 from fomo import app as app_module
 from fomo.app import PimApp
@@ -116,5 +116,46 @@ def test_azure_escape_blurs_input_first_entra_escape_pops(make_app) -> None:
             await wait_for(pilot, lambda: isinstance(app.focused, Input))
             await pilot.press("escape")
             await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    ("screen_cls", "roles"),
+    [
+        (ActivationScreen, [_arm("Reader", SUB)]),
+        (EntraActivationScreen, [_entra("Global Reader")]),
+    ],
+    ids=["azure", "entra"],
+)
+def test_duration_can_never_be_blank(make_app, fake_azure, screen_cls, roles) -> None:
+    async def scenario() -> None:
+        app = make_app()
+        async with app.run_test(size=SIZE) as pilot:
+            await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
+            app.push_screen(screen_cls(roles))
+            await wait_for(pilot, lambda: isinstance(app.focused, Input))
+            screen = app.screen
+            duration = screen.query_one("#duration", Select)
+
+            # No blank row: every option is a real ISO 8601 duration.
+            assert duration._allow_blank is False
+            assert Select.NULL not in [value for _, value in duration._options]
+            assert duration.value == "PT1H"
+
+            # Keyboard: Enter in the justification focuses the duration.  Open
+            # the menu and pick its top row, where the blank row used to be.
+            await pilot.press(*"why", "enter")
+            await wait_for(pilot, lambda: app.focused is duration)
+            await pilot.press("enter")
+            await wait_for(pilot, lambda: duration.expanded)
+            await pilot.press("home", "enter")
+            await wait_for(pilot, lambda: not duration.expanded)
+            assert duration.value == "PT30M"
+            assert not duration.is_blank()
+
+            await pilot.click("#btn-activate")
+            await wait_for(pilot, lambda: str(screen.query_one("#btn-back", Button).label) == "Done")
+            assert [d for _, _, d, _ in fake_azure.activations] == ["PT30M"]
 
     asyncio.run(scenario())

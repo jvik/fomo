@@ -71,7 +71,9 @@ class ActivationScreenBase(Screen, Generic[RoleT]):
             yield Label("Justification  [dim](required, shared across all roles)[/dim]")
             yield Input(placeholder="Reason for activation", id="justification")
             yield Label("Duration")
-            yield Select(_DURATION_OPTIONS, value="PT1H", id="duration")
+            # No blank row: a blank Select's value is Select.NULL, which is
+            # truthy and would reach activate_role as the duration.
+            yield Select(_DURATION_OPTIONS, value="PT1H", allow_blank=False, id="duration")
         with Horizontal(id="buttons"):
             yield Button("Activate", variant="primary", id="btn-activate")
             yield Button("Back", id="btn-back")
