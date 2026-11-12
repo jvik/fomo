@@ -25,7 +25,12 @@ uv run fomo --demo       # loads dummy data, no Azure account needed
 
 ```sh
 uv run pytest
+uv run ruff check .          # lint (or `just lint`, which also checks formatting)
+uv run ruff format .         # format (or `just fmt`)
+uv run mypy fomo             # type check (or `just typecheck`)
 ```
+
+CI runs all of these on Python 3.11–3.13.
 
 ## Common chores
 
@@ -33,6 +38,8 @@ Recipes live in the [justfile](justfile) (requires [just](https://github.com/cas
 
 ```sh
 just test          # run tests
+just lint          # ruff check + format check
+just typecheck     # mypy
 just demo          # run app with dummy data
 just screenshots   # regenerate docs/screenshots/*.svg
 just build         # build sdist + wheel
@@ -73,4 +80,4 @@ Commits drive automated releases via [release-please](https://github.com/googlea
 
 - Target `main`.
 - Keep PRs focused — one concern per PR.
-- CI must pass (build + pytest) before merging.
+- CI must pass (lint, type check, pytest and build) before merging.

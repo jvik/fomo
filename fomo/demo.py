@@ -1,16 +1,46 @@
-"""Dummy data for --demo mode (screenshot generation, no Azure auth required)."""
+"""Dummy data for --demo mode (screenshot generation, no Azure auth required).
+
+Every end time is relative to when this module was imported: active roles and
+assignments end 30-90 minutes later, eligibilities one to six months later.
+Screenshots therefore never show stale dates, every listing in a session
+agrees with the others, and active roles count down as real ones do.
+"""
 
 from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
 
 from fomo.azure import (
     ActiveAssignment,
     ActiveEntraAssignment,
-    EntraEligibleRole,
     EligibleRole,
+    EntraEligibleRole,
     Subscription,
 )
 
 _PRINCIPAL = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+_START = datetime.now(UTC).replace(microsecond=0)
+
+
+def _iso(moment: datetime) -> str:
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _in_minutes(minutes: int) -> str:
+    """An activation end *minutes* after the demo data was made (ISO 8601, UTC)."""
+    return _iso(_START + timedelta(minutes=minutes))
+
+
+def _in_days(days: int) -> str:
+    """An eligibility end *days* after the demo data was made (ISO 8601, UTC)."""
+    return _iso(_START + timedelta(days=days))
+
+
+# Active PIM activations, shared by the eligible roles and the assignments.
+_CONTRIBUTOR_ACTIVE_UNTIL = _in_minutes(47)
+_KEY_VAULT_ACTIVE_UNTIL = _in_minutes(38)
+_CLOUD_APP_ADMIN_ACTIVE_UNTIL = _in_minutes(82)
 
 # ---------------------------------------------------------------------------
 # Subscriptions
@@ -42,7 +72,7 @@ _SUB_ROLES: list[EligibleRole] = [
         scope_display_name="Contoso Production",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="sched-0001",
-        expiry="2026-12-31T00:00:00Z",
+        expiry=_in_days(160),
         is_active=False,
     ),
     EligibleRole(
@@ -52,8 +82,9 @@ _SUB_ROLES: list[EligibleRole] = [
         scope_display_name="Contoso Production",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="sched-0002",
-        expiry="2026-09-30T00:00:00Z",
+        expiry=_in_days(90),
         is_active=True,
+        active_until=_CONTRIBUTOR_ACTIVE_UNTIL,
     ),
     EligibleRole(
         role_name="Storage Blob Data Owner",
@@ -62,7 +93,7 @@ _SUB_ROLES: list[EligibleRole] = [
         scope_display_name="rg-prod-storage",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="sched-0003",
-        expiry="2026-12-31T00:00:00Z",
+        expiry=_in_days(160),
         is_active=False,
     ),
     # Contoso Development
@@ -83,7 +114,7 @@ _SUB_ROLES: list[EligibleRole] = [
         scope_display_name="Contoso Development",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="sched-0005",
-        expiry="2026-10-15T00:00:00Z",
+        expiry=_in_days(105),
         is_active=False,
     ),
     EligibleRole(
@@ -93,7 +124,7 @@ _SUB_ROLES: list[EligibleRole] = [
         scope_display_name="rg-devtest",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="sched-0006",
-        expiry="2027-01-01T00:00:00Z",
+        expiry=_in_days(165),
         is_active=False,
     ),
     # Contoso Shared Services
@@ -104,7 +135,7 @@ _SUB_ROLES: list[EligibleRole] = [
         scope_display_name="Contoso Shared Services",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="sched-0007",
-        expiry="2026-11-30T00:00:00Z",
+        expiry=_in_days(140),
         is_active=False,
     ),
     EligibleRole(
@@ -114,7 +145,7 @@ _SUB_ROLES: list[EligibleRole] = [
         scope_display_name="rg-monitoring",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="sched-0008",
-        expiry="2026-08-31T00:00:00Z",
+        expiry=_in_days(60),
         is_active=False,
     ),
     # Fabrikam Platform
@@ -125,7 +156,7 @@ _SUB_ROLES: list[EligibleRole] = [
         scope_display_name="rg-aks-prod",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="sched-0009",
-        expiry="2026-12-31T00:00:00Z",
+        expiry=_in_days(160),
         is_active=False,
     ),
     EligibleRole(
@@ -135,7 +166,7 @@ _SUB_ROLES: list[EligibleRole] = [
         scope_display_name="Fabrikam Platform",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="sched-0010",
-        expiry="2027-03-01T00:00:00Z",
+        expiry=_in_days(180),
         is_active=False,
     ),
     # Woodgrove Analytics
@@ -146,7 +177,7 @@ _SUB_ROLES: list[EligibleRole] = [
         scope_display_name="Woodgrove Analytics",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="sched-0011",
-        expiry="2026-07-31T00:00:00Z",
+        expiry=_in_days(30),
         is_active=False,
     ),
     EligibleRole(
@@ -156,7 +187,7 @@ _SUB_ROLES: list[EligibleRole] = [
         scope_display_name="rg-analytics",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="sched-0012",
-        expiry="2026-10-01T00:00:00Z",
+        expiry=_in_days(91),
         is_active=False,
     ),
     # Management group (global scope)
@@ -172,18 +203,29 @@ _SUB_ROLES: list[EligibleRole] = [
     ),
 ]
 
-_SUB_ID_TO_ROLES: dict[str, list[EligibleRole]] = {}
+#: The management groups above a subscription, nearest first.
+_PARENT_MGS: dict[str, tuple[str, ...]] = {
+    "11111111-1111-1111-1111-111111111111": ("mg-contoso",),
+}
+
+# Roles by subscription ID, or by management group name for global ones.
+_ROLES_BY_SCOPE: dict[str, list[EligibleRole]] = {}
 for _r in _SUB_ROLES:
-    parts = _r.scope.split("/")
-    if len(parts) >= 3 and parts[1] == "subscriptions":
-        _key = parts[2]
-    else:
-        _key = "__global__"
-    _SUB_ID_TO_ROLES.setdefault(_key, []).append(_r)
+    _parts = _r.scope.split("/")
+    _key = _parts[2] if _parts[1] == "subscriptions" else _parts[-1]
+    _ROLES_BY_SCOPE.setdefault(_key, []).append(_r)
 
 
 def list_eligible_roles(sub_id: str) -> list[EligibleRole]:
-    return list(_SUB_ID_TO_ROLES.get(sub_id, []))
+    """The roles in *sub_id* plus those inherited from its management groups.
+
+    Real Azure does the same: ``asTarget()`` at a subscription also returns
+    the eligibilities on its parent management groups.
+    """
+    roles = list(_ROLES_BY_SCOPE.get(sub_id, []))
+    for mg in _PARENT_MGS.get(sub_id, ()):
+        roles += _ROLES_BY_SCOPE.get(mg, [])
+    return roles
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +238,7 @@ _ENTRA_ROLES: list[EntraEligibleRole] = [
         role_definition_id="f2ef992c-3afb-46b9-b7cf-a126ee74c451",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="entra-sched-0001",
-        expiry="2026-12-31T00:00:00Z",
+        expiry=_in_days(160),
         directory_scope_id="/",
         is_active=False,
     ),
@@ -214,16 +256,17 @@ _ENTRA_ROLES: list[EntraEligibleRole] = [
         role_definition_id="158c047a-c907-4556-b7ef-446551a6b5f7",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="entra-sched-0003",
-        expiry="2026-06-30T00:00:00Z",
+        expiry=_in_days(45),
         directory_scope_id="/",
         is_active=True,
+        active_until=_CLOUD_APP_ADMIN_ACTIVE_UNTIL,
     ),
     EntraEligibleRole(
         role_name="Privileged Role Administrator",
         role_definition_id="e8611ab8-c189-46e8-94e1-60213ab1f814",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="entra-sched-0004",
-        expiry="2026-09-15T00:00:00Z",
+        expiry=_in_days(75),
         directory_scope_id="/",
         is_active=False,
     ),
@@ -232,7 +275,7 @@ _ENTRA_ROLES: list[EntraEligibleRole] = [
         role_definition_id="3a2c62db-5318-420d-8d74-23affee5d9d5",
         principal_id=_PRINCIPAL,
         eligibility_schedule_id="entra-sched-0005",
-        expiry="2026-11-01T00:00:00Z",
+        expiry=_in_days(120),
         directory_scope_id="/",
         is_active=False,
     ),
@@ -252,7 +295,7 @@ ACTIVE_ARM_ASSIGNMENTS: list[ActiveAssignment] = [
         role_name="Contributor",
         scope="/subscriptions/11111111-1111-1111-1111-111111111111",
         scope_display_name="Contoso Production",
-        expiry="2026-06-30T18:00:00Z",
+        expiry=_CONTRIBUTOR_ACTIVE_UNTIL,
         assignment_type="Activated",
     ),
     ActiveAssignment(
@@ -266,7 +309,7 @@ ACTIVE_ARM_ASSIGNMENTS: list[ActiveAssignment] = [
         role_name="Key Vault Secrets User",
         scope="/subscriptions/44444444-4444-4444-4444-444444444444",
         scope_display_name="Fabrikam Platform",
-        expiry="2026-06-28T09:30:00Z",
+        expiry=_KEY_VAULT_ACTIVE_UNTIL,
         assignment_type="Activated",
     ),
     ActiveAssignment(
@@ -282,7 +325,7 @@ ACTIVE_ENTRA_ASSIGNMENTS: list[ActiveEntraAssignment] = [
     ActiveEntraAssignment(
         role_name="Cloud Application Administrator",
         directory_scope_id="/",
-        expiry="2026-06-30T18:00:00Z",
+        expiry=_CLOUD_APP_ADMIN_ACTIVE_UNTIL,
         assignment_type="Activated",
     ),
     ActiveEntraAssignment(

@@ -1,14 +1,20 @@
 """AzTier blast-radius tiering for Azure and Entra roles.
 
-Data source: https://github.com/emiliensocchi/azure-tiering
-Fetched once and cached at ~/.cache/fomo/tiering_{azure,entra}.json.
+Data source: https://github.com/emiliensocchi/azure-tiering at the commit in
+``_TIERING_REF``.  Fetched on demand and cached for a week at
+~/.cache/fomo/tiering_{azure,entra}.json; an older cached copy is used when a
+refresh fails.  Tier data is optional: loading it never raises, and without it
+the index is simply empty.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
+import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -19,14 +25,18 @@ log = logging.getLogger(__name__)
 _CACHE_DIR = os.path.expanduser("~/.cache/fomo")
 _CACHE_TTL = 7 * 24 * 3600  # 1 week
 
-_AZURE_URL = (
-    "https://raw.githubusercontent.com/emiliensocchi/azure-tiering/main"
-    "/Azure%20roles/tiered-azure-roles.json"
-)
-_ENTRA_URL = (
-    "https://raw.githubusercontent.com/emiliensocchi/azure-tiering/main"
-    "/Entra%20roles/tiered-entra-roles.json"
-)
+# Upstream commit of emiliensocchi/azure-tiering that the tier data is read
+# from.  Pinned so that the risk labels shown before a privileged activation
+# only change with a fomo release, not whenever the third-party repo changes.
+# To bump it: pick a commit from
+# https://github.com/emiliensocchi/azure-tiering/commits/main, review the diff
+# of the two JSON files below since the current ref, and paste the full
+# 40-character SHA here.  Existing user caches pick up the new data once they
+# are older than _CACHE_TTL.
+_TIERING_REF = "4afd962a8db1c53d42fb6ef88a008c4b5d074ec9"
+_TIERING_BASE = f"https://raw.githubusercontent.com/emiliensocchi/azure-tiering/{_TIERING_REF}"
+_AZURE_URL = f"{_TIERING_BASE}/Azure%20roles/tiered-azure-roles.json"
+_ENTRA_URL = f"{_TIERING_BASE}/Entra%20roles/tiered-entra-roles.json"
 
 # Tier display metadata
 TIER_BADGE: dict[int, str] = {0: "🔴", 1: "🟠", 2: "🟡", 3: "🟢"}
@@ -55,110 +65,200 @@ class TierInfo(TypedDict):
 _azure_index: dict[str, TierInfo] = {}
 _entra_index: dict[str, TierInfo] = {}
 
+# Serialise ensure_*_loaded() so concurrent workers load each index once.
+# Separate locks keep an Azure load from blocking an Entra load.
+_azure_lock = threading.Lock()
+_entra_lock = threading.Lock()
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _cache_path(kind: str) -> str:
     return os.path.join(_CACHE_DIR, f"tiering_{kind}.json")
 
 
-def _load_disk_cache(kind: str) -> list | None:
+def _read_disk_cache(kind: str) -> tuple[list | None, bool]:
+    """Return the cached data for *kind* and whether it is still fresh.
+
+    Stale data (older than ``_CACHE_TTL``) is returned too, as a fallback for
+    when a refresh fails.  The data is None if there is no readable cache.
+    """
     path = _cache_path(kind)
     try:
-        mtime = os.path.getmtime(path)
-        if time.time() - mtime > _CACHE_TTL:
-            return None
+        age = time.time() - os.path.getmtime(path)
         with open(path) as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return None
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None, False
+    if not isinstance(data, list):
+        return None, False
+    return data, age <= _CACHE_TTL
 
 
 def _save_disk_cache(kind: str, data: list) -> None:
-    os.makedirs(_CACHE_DIR, exist_ok=True)
+    """Write the cache atomically (temp file in the same directory, then rename).
+
+    Never raises: an unwritable cache directory only costs a refetch later.
+    """
     path = _cache_path(kind)
+    tmp: str | None = None
     try:
-        with open(path, "w") as f:
+        os.makedirs(_CACHE_DIR, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=_CACHE_DIR, prefix=f".tiering_{kind}.", suffix=".tmp")
+        with os.fdopen(fd, "w") as f:
             json.dump(data, f)
-    except OSError as exc:
+        os.replace(tmp, path)
+        tmp = None
+    except (OSError, TypeError, ValueError) as exc:
         log.warning("tiering: could not write cache %s: %s", path, exc)
+    finally:
+        if tmp is not None:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
 
 
 def _fetch_json(url: str) -> list | None:
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "fomo/tiering"})
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read())
-    except Exception as exc:  # noqa: BLE001
+            data = json.loads(resp.read())
+    except Exception as exc:
         log.debug("tiering: fetch failed for %s: %s", url, exc)
         return None
+    if not isinstance(data, list):
+        log.debug("tiering: %s returned %s, not a list", url, type(data).__name__)
+        return None
+    return data
 
 
-def _build_index(data: list) -> dict[str, TierInfo]:
+def _text(item: dict, *keys: str) -> str:
+    """Return the first non-empty string among *keys* of *item*, or ""."""
+    for key in keys:
+        value = item.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+def _build_index(data: object) -> dict[str, TierInfo]:
+    """Index tier entries by lower-case role GUID, skipping malformed entries.
+
+    An entry is kept only if it is an object with a non-empty string ``id``
+    and an integer-convertible ``tier``.  Text fields that aren't strings
+    are treated as empty.
+    """
     index: dict[str, TierInfo] = {}
-    for item in data:
-        guid = item.get("id", "").lower().strip()
+    if not isinstance(data, list):
+        log.debug("tiering: ignoring tier data of type %s", type(data).__name__)
+        return index
+    for pos, item in enumerate(data):
+        if not isinstance(item, dict):
+            log.debug("tiering: skipping entry %d: not an object", pos)
+            continue
+        raw_id = item.get("id")
+        guid = raw_id.lower().strip() if isinstance(raw_id, str) else ""
         if not guid:
+            log.debug("tiering: skipping entry %d: id %r is not a non-empty string", pos, raw_id)
             continue
         try:
             tier = int(item["tier"])
-        except (KeyError, ValueError):
+        except (KeyError, TypeError, ValueError, OverflowError):
+            log.debug("tiering: skipping entry %d (%s): tier %r is not an integer", pos, guid, item.get("tier"))
             continue
-        attack_path = (
-            item.get("shortestPath")
-            or item.get("worstCaseScenario")
-            or item.get("providesFullAccessTo")
-            or ""
-        )
         index[guid] = TierInfo(
             tier=tier,
-            name=item.get("assetName", ""),
-            attack_path=attack_path,
+            name=_text(item, "assetName"),
+            attack_path=_text(item, "shortestPath", "worstCaseScenario", "providesFullAccessTo"),
         )
     return index
+
+
+def _load_index(kind: str, url: str, allow_network: bool) -> dict[str, TierInfo]:
+    """Build the *kind* index from the fresh cache, a download, or the stale cache, in that order."""
+    cached, fresh = _read_disk_cache(kind)
+    if cached is not None and fresh:
+        index = _build_index(cached)
+        if index:
+            return index
+    if allow_network:
+        log.debug("tiering: fetching %s tier data from GitHub", kind)
+        fetched = _fetch_json(url)
+        if fetched is not None:
+            index = _build_index(fetched)
+            if index:
+                _save_disk_cache(kind, fetched)
+                return index
+            log.warning("tiering: downloaded %s tier data has no usable entries", kind)
+    else:
+        log.info("tiering: network disabled; using only cached %s tier data", kind)
+    if cached is not None:
+        log.info("tiering: using stale cached %s tier data", kind)
+        return _build_index(cached)
+    log.warning("tiering: no %s tier data available; blast-radius badges will be absent", kind)
+    return {}
 
 
 # ---------------------------------------------------------------------------
 # Public API — called from background worker threads
 # ---------------------------------------------------------------------------
 
-def load_azure() -> None:
+
+def load_azure(allow_network: bool = True) -> None:
     """Load (or refresh) the Azure roles tiering index.
 
-    Safe to call from a background thread.  Reads disk cache if fresh,
-    otherwise fetches from GitHub.  Populates the module-level lookup dict.
+    Safe to call from a background thread.  Reads the disk cache if fresh,
+    otherwise fetches from GitHub unless *allow_network* is False, and falls
+    back to a stale cache if that yields nothing.  Populates the
+    module-level lookup dict.
     """
     global _azure_index
-    data = _load_disk_cache("azure")
-    if data is None:
-        log.debug("tiering: fetching Azure roles from GitHub")
-        data = _fetch_json(_AZURE_URL) or []
-        if data:
-            _save_disk_cache("azure", data)
-        else:
-            log.warning("tiering: could not load Azure tiering data; blast-radius badges will be absent")
-    _azure_index = _build_index(data)
+    _azure_index = _load_index("azure", _AZURE_URL, allow_network)
     log.debug("tiering: loaded %d Azure role entries", len(_azure_index))
 
 
-def load_entra() -> None:
+def load_entra(allow_network: bool = True) -> None:
     """Load (or refresh) the Entra roles tiering index.
 
-    Safe to call from a background thread.
+    Safe to call from a background thread; see :func:`load_azure`.
     """
     global _entra_index
-    data = _load_disk_cache("entra")
-    if data is None:
-        log.debug("tiering: fetching Entra roles from GitHub")
-        data = _fetch_json(_ENTRA_URL) or []
-        if data:
-            _save_disk_cache("entra", data)
-        else:
-            log.warning("tiering: could not load Entra tiering data; blast-radius badges will be absent")
-    _entra_index = _build_index(data)
+    _entra_index = _load_index("entra", _ENTRA_URL, allow_network)
     log.debug("tiering: loaded %d Entra role entries", len(_entra_index))
+
+
+def ensure_azure_loaded(allow_network: bool = True) -> None:
+    """Load the Azure tiering index unless it is already populated.
+
+    Thread-safe: concurrent callers wait for the first load instead of
+    starting their own.  An empty index (no data available) is retried on
+    the next call.  Never raises: tier data is optional, so any failure is
+    logged and leaves the index empty.  With *allow_network* False (demo
+    mode) only the disk cache is read.
+    """
+    with _azure_lock:
+        if _azure_index:
+            return
+        try:
+            load_azure(allow_network=allow_network)
+        except Exception:
+            log.warning("tiering: could not load Azure tier data; badges will be absent", exc_info=True)
+
+
+def ensure_entra_loaded(allow_network: bool = True) -> None:
+    """Load the Entra tiering index unless it is already populated.
+
+    Thread-safe and never raises; see :func:`ensure_azure_loaded`.
+    """
+    with _entra_lock:
+        if _entra_index:
+            return
+        try:
+            load_entra(allow_network=allow_network)
+        except Exception:
+            log.warning("tiering: could not load Entra tier data; badges will be absent", exc_info=True)
 
 
 def get_azure_tier(role_definition_id: str) -> TierInfo | None:

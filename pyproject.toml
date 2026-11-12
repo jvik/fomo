@@ -6,13 +6,35 @@ build-backend = "hatchling.build"
 name = "fomo"
 dynamic = ["version"]
 description = "TUI for Azure PIM role activation with multiselect"
+readme = "README.md"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
+keywords = ["azure", "pim", "privileged-identity-management", "entra", "tui", "textual", "cli"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Systems Administration",
+]
 dependencies = [
-    "textual>=0.70.0",
+    "textual>=8.2,<9",
 ]
 
+[project.urls]
+Homepage = "https://github.com/jvik/fomo"
+Issues = "https://github.com/jvik/fomo/issues"
+
 [dependency-groups]
-dev = ["pytest"]
+dev = [
+    "mypy>=2.4.1",
+    "pytest",
+    "ruff>=0.17.4",
+]
 
 [project.scripts]
 fomo = "fomo.__main__:main"
@@ -27,3 +49,27 @@ source = "vcs"
 
 [tool.hatch.build.hooks.vcs]
 version-file = "fomo/_version.py"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+# plan/ holds the improvement-plan docs and runner scripts, not package code.
+extend-exclude = ["plan"]
+
+[tool.ruff.format]
+# The CLI contract test is frozen byte for byte; only approved contract
+# changes may touch it, so the formatter leaves it alone.
+exclude = ["tests/test_cli_contract.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ARG"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests request pytest fixtures for their side effects (patching, kill switch)
+# and fakes mirror the real signatures, so unused arguments are intentional.
+"tests/**" = ["ARG001", "ARG002", "ARG005"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+check_untyped_defs = false

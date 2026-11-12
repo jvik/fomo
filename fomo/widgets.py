@@ -2,17 +2,54 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from typing import Any, Self
+
 from rich.segment import Segment
 from rich.style import Style
-
+from textual import events
 from textual.strip import Strip
 from textual.widgets import SelectionList
-from textual.widgets._option_list import OptionDoesNotExist
-from textual.widgets._toggle_button import ToggleButton
+from textual.widgets.option_list import OptionDoesNotExist
+
+# Same half-block characters as Textual's ToggleButton.BUTTON_LEFT/BUTTON_RIGHT
+# (a private class), so the toggle keeps its look without the private import.
+BUTTON_LEFT = "▐"
+BUTTON_RIGHT = "▌"
+
+
+_BOLD = Style(bold=True)
 
 
 class FomoSelectionList(SelectionList):
-    """SelectionList that uses ○/◉ to distinguish unselected/selected."""
+    """SelectionList that uses ○/◉ to distinguish unselected/selected.
+
+    A selected row also has bold text and a bold ◉ in the success colour (see
+    ``app.tcss``), so it stands out from the rest of the list, not only by
+    its one-cell toggle.
+
+    A list that gains focus, or is filled while it has focus, highlights its
+    first selectable row, so the first Space toggles something.  A list filled
+    after mount otherwise has no highlighted row at all.
+    """
+
+    def _highlight_first_enabled(self) -> None:
+        """Highlight the first enabled row if no row is highlighted."""
+        if self.highlighted is not None or self.option_count == 0:
+            return
+        first = next((i for i, option in enumerate(self.options) if not option.disabled), None)
+        if first is not None:
+            self.highlighted = first
+
+    def on_focus(self, _event: events.Focus) -> None:
+        self._highlight_first_enabled()
+
+    def add_options(self, items: Iterable[Any]) -> Self:
+        # Also covers add_option and set_options, which go through here.
+        super().add_options(items)
+        if self.has_focus:
+            self._highlight_first_enabled()
+        return self
 
     def render_line(self, y: int) -> Strip:
         line = super(SelectionList, self).render_line(y)
@@ -40,13 +77,18 @@ class FomoSelectionList(SelectionList):
         button_style += Style(meta={"option": selection_index})
 
         inner = "◉" if is_selected else "○"
+        segments: Iterable[Segment] = line
+        if is_selected:
+            button_style += _BOLD
+            # Over the row's own styles, so that nothing in the prompt turns it off.
+            segments = Segment.apply_style(line, post_style=_BOLD)
 
         return Strip(
             [
-                Segment(ToggleButton.BUTTON_LEFT, style=side_style),
+                Segment(BUTTON_LEFT, style=side_style),
                 Segment(inner, style=button_style),
-                Segment(ToggleButton.BUTTON_RIGHT, style=side_style),
+                Segment(BUTTON_RIGHT, style=side_style),
                 Segment(" ", style=underlying_style),
-                *line,
+                *segments,
             ]
         )
