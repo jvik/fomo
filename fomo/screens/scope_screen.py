@@ -68,6 +68,7 @@ class ScopeScreen(VimNavMixin, Screen):
         # Entra tab state
         self._entra_loaded = False
         self._entra_loading = False
+        self._focus_entra_on_load = False  # set by h/l while the roles are loading
         self._stop_event = threading.Event()
         self.all_roles: list[azure.EntraEligibleRole] = []
         self._selected: set[int] = set()
@@ -125,12 +126,33 @@ class ScopeScreen(VimNavMixin, Screen):
         return self.query_one("#scope-tabs", TabbedContent).active or "tab-azure"
 
     def action_next_tab(self) -> None:
-        tc = self.query_one("#scope-tabs", TabbedContent)
-        tc.active = "tab-entra" if tc.active == "tab-azure" else "tab-azure"
+        self._switch_tab("tab-entra" if self._active_tab() == "tab-azure" else "tab-azure")
 
     def action_prev_tab(self) -> None:
+        self._switch_tab("tab-azure" if self._active_tab() == "tab-entra" else "tab-entra")
+
+    def _switch_tab(self, target: str) -> None:
+        """Activate *target* and move focus to its list (``h``/``l``)."""
         tc = self.query_one("#scope-tabs", TabbedContent)
-        tc.active = "tab-azure" if tc.active == "tab-entra" else "tab-entra"
+        # Take focus off the old pane first, synchronously.  Otherwise hiding the
+        # pane hands focus to the old pane's filter, and TabbedContent switches
+        # straight back to the pane that now holds focus.
+        self.set_focus(tc.query_one(Tabs))
+        tc.active = target
+        self.call_after_refresh(self._focus_pane_list, target)
+
+    def _focus_pane_list(self, target: str) -> None:
+        """Focus the list on *target* if it has loaded; else keep the tab bar."""
+        if not self.is_attached or self._active_tab() != target or not isinstance(self.focused, Tabs):
+            return
+        if target == "tab-entra":
+            if not self._entra_loaded:
+                # The roles are (about to start) loading: focus the list when they arrive.
+                self._focus_entra_on_load = True
+            elif self.all_roles:
+                self.query_one("#entra-role-list").focus()
+        elif self._all_subs:
+            self.query_one("#sub-list").focus()
 
     @on(TabbedContent.TabActivated, "#scope-tabs")
     def on_tab_activated(self, event: TabbedContent.TabActivated) -> None:
@@ -302,6 +324,7 @@ class ScopeScreen(VimNavMixin, Screen):
     def _on_entra_roles_loaded(self, roles: list[azure.EntraEligibleRole]) -> None:
         self._entra_loaded = True
         self._entra_loading = False
+        focus_pending, self._focus_entra_on_load = self._focus_entra_on_load, False
         self.all_roles = roles
         self.query_one("#entra-spinner").display = False
         if not roles:
@@ -310,12 +333,17 @@ class ScopeScreen(VimNavMixin, Screen):
         self.query_one("#entra-loading-area").display = False
         self.query_one("#entra-split").display = True
         self._rebuild_entra_list("")
-        if self._initial_tab == "tab-entra":
+        # Started on this tab (--entra), or got here with h/l and still waiting
+        # on the tab bar.
+        if self._initial_tab == "tab-entra" or (
+            focus_pending and self._active_tab() == "tab-entra" and isinstance(self.focused, Tabs)
+        ):
             self.query_one("#entra-role-list").focus()
         self._update_entra_status()
 
     def _on_entra_error(self, msg: str) -> None:
         self._entra_loading = False
+        self._focus_entra_on_load = False
         self.query_one("#entra-spinner").display = False
         body: str | Content
         if azure.is_auth_error(msg):

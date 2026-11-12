@@ -101,7 +101,7 @@ fomo
 
 ### Entra roles
 
-1. Switch to the **Entra** tab with `l` (or left/right arrow keys on the tab bar)
+1. Switch to the **Entra** tab with `h`/`l` (or ←/→ on the tab bar)
 2. The app fetches your eligible directory roles via Microsoft Graph (first use, and any use after the cached refresh token has expired, requires a **device code** browser sign-in; see [Authentication](#authentication))
 3. Multiselect the roles to activate (already-active roles are marked)
 4. Choose a duration, enter a justification, and confirm
