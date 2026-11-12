@@ -10,6 +10,8 @@ import logging
 import os
 import stat
 import subprocess
+import threading
+import time
 import urllib.error
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -329,3 +331,88 @@ def test_token_cache_write_failure_keeps_the_old_cache(
 
     assert cache_path.read_text() == '{"refresh_token": "old"}'
     assert os.listdir(cache_path.parent) == ["graph_token.json"]  # temp file removed
+
+
+# ---------------------------------------------------------------------------
+# Graph token lock
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def device_code_flows(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Fake a slow device-code flow; return the tenants it was started for."""
+    flows: list[str] = []
+
+    def _flow(tenant_id: str, on_device_code: Any = None, stop_event: Any = None) -> dict:
+        flows.append(tenant_id)
+        time.sleep(0.2)
+        return {"access_token": "AT", "refresh_token": "RT", "expires_in": 3600}
+
+    monkeypatch.setattr(azure, "_device_code_flow", _flow)
+    monkeypatch.setattr(azure, "_get_tenant_id", lambda: "tenant-1")
+    return flows
+
+
+def _call_in_thread(results: list[Any], **kwargs: Any) -> threading.Thread:
+    def _target() -> None:
+        try:
+            results.append(azure._get_graph_token(**kwargs))
+        except Exception as exc:
+            results.append(exc)
+
+    thread = threading.Thread(target=_target)
+    thread.start()
+    return thread
+
+
+def test_concurrent_callers_share_one_device_code_flow(device_code_flows: list[str]) -> None:
+    results: list[Any] = []
+
+    threads = [_call_in_thread(results), _call_in_thread(results)]
+    for thread in threads:
+        thread.join(timeout=5)
+
+    assert device_code_flows == ["tenant-1"]
+    assert results == ["AT", "AT"]
+
+
+def test_waiting_caller_gives_up_when_its_screen_closes(monkeypatch: pytest.MonkeyPatch) -> None:
+    flows: list[str] = []
+    started, release = threading.Event(), threading.Event()
+
+    def _flow(tenant_id: str, on_device_code: Any = None, stop_event: Any = None) -> dict:
+        flows.append(tenant_id)
+        started.set()
+        release.wait(5)  # the user hasn't signed in yet
+        return {"access_token": "AT", "refresh_token": "RT", "expires_in": 3600}
+
+    monkeypatch.setattr(azure, "_device_code_flow", _flow)
+    monkeypatch.setattr(azure, "_get_tenant_id", lambda: "tenant-1")
+    first: list[Any] = []
+    second: list[Any] = []
+    stop = threading.Event()
+
+    first_thread = _call_in_thread(first)
+    try:
+        assert started.wait(5)  # the first caller holds the lock
+        second_thread = _call_in_thread(second, stop_event=stop)
+        stop.set()
+        second_thread.join(timeout=2)
+
+        assert not second_thread.is_alive()
+        assert [str(exc) for exc in second] == ["Authentication cancelled."]
+    finally:
+        release.set()
+        first_thread.join(timeout=5)
+    assert first == ["AT"]
+    assert flows == ["tenant-1"]
+
+
+def test_cancelled_caller_does_not_start_a_device_code_flow(device_code_flows: list[str]) -> None:
+    stop = threading.Event()
+    stop.set()
+
+    with pytest.raises(RuntimeError, match="^Authentication cancelled.$"):
+        azure._get_graph_token(stop_event=stop)
+
+    assert device_code_flows == []

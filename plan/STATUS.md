@@ -11,7 +11,7 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - [x] 02d docs: align README, man page and AGENTS.md with the code
 - [x] 03a fix(tui): escape external text in markup
 - [x] 03b fix(tui): tiering can never break role loading
-- [ ] 03c fix(security): --log redaction, token-cache permissions, Graph token lock
+- [x] 03c fix(security): --log redaction, token-cache permissions, Graph token lock
 - [ ] 03d fix(tui): blank duration, Entra error wrap, dbus parsing
 - [ ] 03e fix(tui): auth-error classification, modal and Retry
 - [ ] 03f fix(azure): user lookup once, bounded loads, logged lookups, device-code hardening
@@ -43,3 +43,5 @@ Each phase ticks its own line (`- [x] <id> …`) in its last commit. The runner 
 - 03a: the device-code prompt uses a bare `[link]$url[/link]` tag, so the URL isn't a clickable hyperlink (pre-existing; `$` placeholders don't substitute inside tags, so a fix needs `Content.stylize` with a link style).
 - 03b: tier data now loads in its own worker alongside the role fetch, so on a slow first download (no fresh cache) a user who activates before it arrives gets no blast-radius warning. A UI-callback exception now surfaces as Textual's WorkerFailed crash instead of a fake fetch error. `Backend.allow_network` (False for demo) gates the download.
 - 03b: the cache isn't keyed by `_TIERING_REF`, so after a ref bump users keep the old data until the 7-day TTL expires. Demo mode no longer downloads tier data, so `scripts/screenshot.py` (04z) shows tier badges only if `~/.cache/fomo/tiering_*.json` exists. The man page's Network access/FILES text doesn't mention pinning, the stale fallback or offline demo (README only, per the brief).
+- 03c: beyond the brief, a caller waiting on `_graph_token_lock` gives up with "Authentication cancelled." once its `stop_event` is set, and a caller with a set `stop_event` never starts a device-code flow; otherwise a closed screen's worker could open a browser after the other flow ended. A screen that waits shows its loading state, not the other screen's code.
+- 03c: `_redact` also masks the raised `RuntimeError` text of `_run_az` (az stderr) and `_run_graph`, since the screens log it. `az account show`/`account list` bodies (user name, tenant) are still logged; only the token and profile calls skip the body.

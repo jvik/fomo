@@ -451,6 +451,10 @@ _TOKEN_CACHE_PATH = os.path.expanduser("~/.cache/fomo/graph_token.json")
 # Module-level token cache: (access_token, expiry_unix_timestamp)
 _graph_token_cache: tuple[str, float] | None = None
 
+# Serialises Graph token acquisition, so concurrent callers (the Entra tab and
+# the Assignments screen) share one device-code flow instead of starting two.
+_graph_token_lock = threading.RLock()
+
 
 def _get_tenant_id() -> str:
     """Return the tenant ID of the currently active Azure CLI account."""
@@ -608,37 +612,53 @@ def _get_graph_token(
     pre-authorised for delegated PIM scopes without tenant-admin consent and
     without a separate app registration.  Tokens are cached in-process and on
     disk (refresh token) so the browser flow only runs on first use.
+
+    Callers are serialised: a second caller waits for the first one and then
+    reuses its token.  A caller whose *stop_event* is set while it waits, or
+    before it would start a device-code flow, gets "Authentication cancelled."
     """
     global _graph_token_cache
-    now = time.time()
+    if stop_event is None:
+        _graph_token_lock.acquire()
+    else:
+        while not _graph_token_lock.acquire(timeout=0.1):
+            if stop_event.is_set():
+                raise RuntimeError("Authentication cancelled.")
+    try:
+        now = time.time()
 
-    # 1. In-process access token still valid.
-    if _graph_token_cache and _graph_token_cache[1] > now + 60:
-        log.debug("using cached Graph token (expires in %.0fs)", _graph_token_cache[1] - now)
-        return _graph_token_cache[0]
+        # 1. In-process access token still valid.
+        if _graph_token_cache and _graph_token_cache[1] > now + 60:
+            log.debug("using cached Graph token (expires in %.0fs)", _graph_token_cache[1] - now)
+            return _graph_token_cache[0]
 
-    # 2. Try silent refresh via cached refresh token.
-    cache = _load_token_cache()
-    if cache and "refresh_token" in cache:
-        tenant_id = cache.get("tenant_id") or _get_tenant_id()
-        log.debug("refreshing Graph token for tenant %s", tenant_id)
-        token_data = _try_refresh_token(tenant_id, cache["refresh_token"])
-        if token_data and "access_token" in token_data:
-            expiry = now + float(token_data.get("expires_in", 3600)) - 60
-            _graph_token_cache = (token_data["access_token"], expiry)
-            _save_token_cache(token_data, tenant_id)
-            log.debug("Graph token refreshed, expires in %.0fs", token_data.get("expires_in", 3600))
-            return token_data["access_token"]
+        # 2. Try silent refresh via cached refresh token.
+        cache = _load_token_cache()
+        if cache and "refresh_token" in cache:
+            tenant_id = cache.get("tenant_id") or _get_tenant_id()
+            log.debug("refreshing Graph token for tenant %s", tenant_id)
+            token_data = _try_refresh_token(tenant_id, cache["refresh_token"])
+            if token_data and "access_token" in token_data:
+                expiry = now + float(token_data.get("expires_in", 3600)) - 60
+                _graph_token_cache = (token_data["access_token"], expiry)
+                _save_token_cache(token_data, tenant_id)
+                log.debug("Graph token refreshed, expires in %.0fs", token_data.get("expires_in", 3600))
+                return token_data["access_token"]
 
-    # 3. Interactive device code flow.
-    tenant_id = _get_tenant_id()
-    log.debug("starting device code flow for tenant %s", tenant_id)
-    token_data = _device_code_flow(tenant_id, on_device_code, stop_event)
-    expiry = now + float(token_data.get("expires_in", 3600)) - 60
-    _graph_token_cache = (token_data["access_token"], expiry)
-    _save_token_cache(token_data, tenant_id)
-    log.debug("Graph token acquired via device code, expires in %.0fs", token_data.get("expires_in", 3600))
-    return token_data["access_token"]
+        # 3. Interactive device code flow -- unless the caller has gone away
+        # (e.g. its screen closed while it waited for another caller's flow).
+        if stop_event is not None and stop_event.is_set():
+            raise RuntimeError("Authentication cancelled.")
+        tenant_id = _get_tenant_id()
+        log.debug("starting device code flow for tenant %s", tenant_id)
+        token_data = _device_code_flow(tenant_id, on_device_code, stop_event)
+        expiry = now + float(token_data.get("expires_in", 3600)) - 60
+        _graph_token_cache = (token_data["access_token"], expiry)
+        _save_token_cache(token_data, tenant_id)
+        log.debug("Graph token acquired via device code, expires in %.0fs", token_data.get("expires_in", 3600))
+        return token_data["access_token"]
+    finally:
+        _graph_token_lock.release()
 
 
 def _run_graph(method: str, url: str, body: str | None = None) -> Any:
