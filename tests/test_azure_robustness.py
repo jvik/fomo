@@ -1,11 +1,13 @@
 """``fomo.azure`` under load and on bad answers (F13, F16, F17).
 
 - F16: the signed-in user's ID is looked up once per process, not once per
-  subscription (each lookup is an ``az`` process).
+  subscription (each lookup is an ``az`` process), and the roles screen loads
+  at most four subscriptions at a time instead of all of them at once.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 import threading
@@ -14,8 +16,17 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from textual.widgets import Label
 
+from fomo import app as app_module
 from fomo import azure
+from fomo.app import PimApp
+from fomo.azure import EligibleRole
+from fomo.screens.roles_screen import MAX_PARALLEL_LOADS, RolesScreen
+from fomo.screens.scope_screen import ScopeScreen
+from fomo.widgets import FomoSelectionList
+from tests.conftest import role
+from tests.test_tui_smoke import SIZE, wait_for
 
 USER_ID = "00000000-0000-0000-0000-00000000c0de"
 USER_SHOW = ["ad", "signed-in-user", "show"]
@@ -133,3 +144,72 @@ def test_reset_caches_forgets_the_user(monkeypatch: pytest.MonkeyPatch) -> None:
     azure.get_current_user()
 
     assert _user_lookups(calls) == 2
+
+
+# ---------------------------------------------------------------------------
+# F16: bounded parallel loads
+# ---------------------------------------------------------------------------
+
+
+class _GatedLoader:
+    """A role loader that records how many calls run at once and finishes one call per ``release()``."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.inside = 0
+        self.max_inside = 0
+        self.calls: list[str] = []
+        self.gate = threading.Semaphore(0)
+
+    def __call__(self, sub_id: str) -> list[EligibleRole]:
+        with self.lock:
+            self.calls.append(sub_id)
+            self.inside += 1
+            self.max_inside = max(self.max_inside, self.inside)
+        try:
+            assert self.gate.acquire(timeout=5), "loader never released"
+        finally:
+            with self.lock:
+                self.inside -= 1
+        return [role("Reader", f"/subscriptions/{sub_id}")]
+
+    def release(self, n: int = 1) -> None:
+        self.gate.release(n)
+
+
+def test_roles_screen_loads_at_most_four_subscriptions_at_once(
+    fake_azure: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(app_module, "_system_is_dark", lambda: True)
+    monkeypatch.setattr(PimApp, "_watch_color_scheme", lambda self: None)
+    loader = _GatedLoader()
+    monkeypatch.setattr(azure, "list_eligible_roles", loader)
+    subs = [f"sub-{i:02d}" for i in range(10)]
+
+    async def scenario() -> None:
+        app = PimApp(demo_mode=False, dry_run=True)
+        async with app.run_test(size=SIZE) as pilot:
+            await wait_for(pilot, lambda: isinstance(app.screen, ScopeScreen))
+            screen = RolesScreen(subs)
+            await app.push_screen(screen)
+            label = screen.query_one("#loading-label", Label)
+            try:
+                await wait_for(pilot, lambda: loader.inside == MAX_PARALLEL_LOADS)
+                await pilot.pause(0.05)  # room for a fifth load to (wrongly) start
+                assert loader.inside == MAX_PARALLEL_LOADS
+                assert str(label.visual) == "Loading roles from 10 subscription(s)…"
+
+                # Progress still moves one subscription at a time, and a freed
+                # slot goes to the next subscription.
+                loader.release()
+                await wait_for(pilot, lambda: str(label.visual) == "Loading roles… 1/10")
+                await wait_for(pilot, lambda: len(loader.calls) == MAX_PARALLEL_LOADS + 1)
+            finally:
+                loader.release(len(subs))
+            role_list = screen.query_one("#role-list", FomoSelectionList)
+            await wait_for(pilot, lambda: role_list.option_count == len(subs))
+
+    asyncio.run(scenario())
+    assert MAX_PARALLEL_LOADS == 4
+    assert loader.max_inside == 4
+    assert sorted(loader.calls) == subs

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -17,6 +19,9 @@ from fomo.widgets import FomoSelectionList as SelectionList
 
 MAX_ROLES = 3
 SORT_MODES = ("name", "scope", "tier", "expiry")
+# Subscriptions whose roles load at the same time.  Each load runs a few `az`
+# processes, so fifty selected subscriptions must not start them all at once.
+MAX_PARALLEL_LOADS = 4
 
 
 class RolesScreen(VimNavMixin, Screen):
@@ -52,6 +57,8 @@ class RolesScreen(VimNavMixin, Screen):
         self._auth_error_shown = False
         self._auth_failed_subs: list[str] = []  # failed with an expired/missing session
         self._sort_mode = SORT_MODES[0]
+        # Shared by every subscription worker of this screen, retries included.
+        self._load_slots = threading.BoundedSemaphore(MAX_PARALLEL_LOADS)
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -80,8 +87,8 @@ class RolesScreen(VimNavMixin, Screen):
             self._load_roles_for_sub(sub_id)
 
     # ------------------------------------------------------------------
-    # Background loading (one worker per subscription, run in parallel,
-    # plus one for the optional tier data)
+    # Background loading (one worker per subscription, at most
+    # MAX_PARALLEL_LOADS fetching at a time, plus one for the optional tier data)
     # ------------------------------------------------------------------
 
     @work(thread=True)
@@ -94,7 +101,8 @@ class RolesScreen(VimNavMixin, Screen):
     @work(thread=True)
     def _load_roles_for_sub(self, sub_id: str) -> None:
         try:
-            roles = self.app.backend.list_eligible_roles(sub_id)  # type: ignore[attr-defined]
+            with self._load_slots:
+                roles = self.app.backend.list_eligible_roles(sub_id)  # type: ignore[attr-defined]
         except Exception as exc:
             self.app.call_from_thread(self._on_roles_error, sub_id, str(exc))
             return
