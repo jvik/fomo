@@ -135,7 +135,7 @@ fomo --log /tmp/fomo.log
 
 Logs include all `az rest` and Graph API calls and responses. Useful for troubleshooting.
 
-> **Upgrading from 1.16.0 or earlier?** Those versions could write your ARM access token and profile data into `--log` files, and wrote the Graph token cache readable by others. fomo now makes the token cache, and a log file it reuses, readable only by you (mode `0600`), but it can't find your old log files: delete them.
+> **Upgrading from 1.16.0 or earlier?** Those versions could write your ARM access token and profile data into `--log` files, and left the Graph token cache readable by others for a moment each time they wrote it, in a directory others could list. fomo now makes the token cache and its directory, and a log file it reuses, private to you (modes `0600` and `0700`), but it can't find your old log files: delete them.
 
 ### Recent activations
 

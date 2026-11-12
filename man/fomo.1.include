@@ -320,10 +320,11 @@ grep 'az rest' /tmp/fomo.log
 .RE
 .PP
 \fBfomo\fR 1.16.0 and earlier could write the ARM access token and profile
-data into \fB\-\-log\fR files, and wrote the Graph token cache readable by
-others.
-\fBfomo\fR now makes the token cache, and a log file it reuses, readable
-only by you (mode 0600), but it cannot find your old log files: delete them.
+data into \fB\-\-log\fR files, and left the Graph token cache readable by
+others for a moment each time they wrote it, in a directory others could list.
+\fBfomo\fR now makes the token cache and its directory, and a log file it
+reuses, private to you (modes 0600 and 0700), but it cannot find your old log
+files: delete them.
 .PP
 .B Non-interactive (CLI) mode
 .PP
